@@ -164,6 +164,8 @@
     }
     .post-back:hover { color: var(--ink); text-decoration: underline; }
     .post-link { overflow-wrap: anywhere; }
+    .blog-embed { width: min(100%, 560px); aspect-ratio: 16 / 9; margin-top: 18px; }
+    .blog-embed iframe { width: 100%; height: 100%; border: 0; display: block; }
     .blog-photo-row {
       width: min(100%, 1200px);
       font-size: 15px;
@@ -1713,11 +1715,11 @@
       <a class="post-back" href="#/blog">← blog</a>
       <div class="blog-row">
         <p>this week was rough</p>
-        <p><a class="post-link" href="https://www.youtube.com/watch?v=2zpYieracgw&amp;list=RD2zpYieracgw&amp;start_radio=1" target="_blank" rel="noreferrer">New Order – Leave Me Alone</a></p>
+        <div class="blog-embed"><iframe src="https://www.youtube-nocookie.com/embed/2zpYieracgw" title="New Order – Leave Me Alone" loading="lazy" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
       </div>
       <div class="blog-photo-row">
         <img src="images/blog/10-6-26-10-9-26.jpg" width="1108" height="990" alt="Flat lay of a pink and gray plaid button-up shirt next to dark-wash straight-leg jeans">
-        <p>this was practically the fit all week</p>
+        <p>this was practically the fit the rest of the week. I’m so basic.</p>
       </div>
     </main>
   </section>
