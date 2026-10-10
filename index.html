@@ -1692,6 +1692,7 @@
     <main class="blog" aria-labelledby="blog-title">
       <h2 class="blog-heading" id="blog-title">blog</h2>
       <div class="blog-row">
+        <p><a href="#/blog/10-5-26-10-9-26">10/5/26–10/9/26</a></p>
         <p><a href="#/blog/10-5-26">10/5/26</a></p>
         <p><a href="#/blog/10-4-26">10/4/26</a></p>
         <p><a href="#/blog/10-3-26">10/3/26</a></p>
@@ -1703,6 +1704,15 @@
         <p><a href="#/blog/8-27-26">8/27/26</a></p>
         <p><a href="#/blog/8-26-26">8/26/26</a></p>
         <p><a href="#/blog/8-25-26">8/25/26</a></p>
+      </div>
+    </main>
+  </section>
+
+  <section class="view blog-post-view" data-route="/blog/10-5-26-10-9-26" hidden>
+    <main class="blog blog-post">
+      <a class="post-back" href="#/blog">← blog</a>
+      <div class="blog-photo-row">
+        <p>this week was rough</p>
       </div>
     </main>
   </section>
@@ -1858,7 +1868,8 @@
           view.hidden = view.getAttribute('data-route') !== path;
         });
         window.scrollTo(0, 0);
-        var post = path.match(/^\/blog\/(\d+)-(\d+)-(\d+)$/);
+        var range = path.match(/^\/blog\/(\d+)-(\d+)-(\d+)-(\d+)-(\d+)-(\d+)$/);
+        var post = range ? [null, range[1], range[2], range[3] + '–' + range[4] + '/' + range[5] + '/' + range[6]] : path.match(/^\/blog\/(\d+)-(\d+)-(\d+)$/);
         document.title = path === '/photographs'
           ? 'Photographs — Angel Montenegro'
           : post
