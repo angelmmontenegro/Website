@@ -1926,6 +1926,11 @@
           </li>
         </ul>
 
+        <div class="tp-locate">
+          <button type="button" class="tp-locate-btn">Show my location</button>
+          <p class="tp-locate-status" aria-live="polite"></p>
+        </div>
+
         <div class="tp-map" role="region" aria-label="Map of Tokyo stores"></div>
 
         <p class="tp-footer">Converse: the Harajuku flagship is the best bet for the All Star J. Margiela: Tokyo-only, sold at these 10 fragrance stores (plus 9 fashion boutiques). T.T's only permanent store is in Kyoto — the Tokyo pin is their ISETAN SALONE pop-up in Roppongi, October 14–18 only.</p>
@@ -1970,6 +1975,45 @@
           font-size: 15px; font-weight: 600; text-decoration: none;
         }
         .tp-root a.tp-dir:hover { background: #333; }
+        .tp-popup-dist { margin-bottom: 14px !important; margin-top: -8px !important; font-size: 13px; font-weight: 600; }
+        .tp-popup-dist:empty { display: none; }
+
+        /* "Show my location" bar */
+        .tp-locate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 12px; }
+        .tp-locate-btn {
+          appearance: none; min-height: 44px; padding: 10px 16px; border: 1px solid #000; border-radius: 0;
+          background: #fff; color: #000; font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .tp-locate-btn:hover { background: #000; color: #fff; }
+        .tp-locate-btn[disabled] { opacity: .5; cursor: progress; }
+        .tp-locate-status { margin: 0; font-size: 13px; color: #616161; }
+        .tp-locate-status:empty { display: none; }
+
+        /* Visitor's position: blue dot, pulsing halo, compass cone */
+        .tp-me-icon { background: none; border: 0; }
+        .tp-me { position: relative; width: 18px; height: 18px; }
+        .tp-me-dot {
+          position: absolute; inset: 0; border-radius: 50%; background: #1a73e8;
+          border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45); z-index: 2;
+        }
+        .tp-me-halo {
+          position: absolute; inset: -9px; border-radius: 50%; background: rgba(26,115,232,.25);
+          animation: tp-pulse 2s ease-out infinite; z-index: 0;
+        }
+        .tp-me-cone {
+          display: none; position: absolute; left: 50%; top: 50%; width: 60px; height: 50px;
+          margin: -50px 0 0 -30px; transform-origin: 50% 100%; z-index: 1;
+          background: linear-gradient(to top, rgba(26,115,232,.7), rgba(26,115,232,.22));
+          clip-path: polygon(50% 100%, 4% 0, 96% 0);
+        }
+        .tp-me.tp-has-heading .tp-me-cone { display: block; }
+        .tp-root .leaflet-tooltip.tp-me-label {
+          padding: 1px 6px; border: 0; border-radius: 0; background: #1a73e8; color: #fff;
+          font-size: 11px; font-weight: 600; box-shadow: none;
+        }
+        .tp-root .leaflet-tooltip.tp-me-label::before { display: none; }
+        @keyframes tp-pulse { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+        @media (prefers-reduced-motion: reduce) { .tp-me-halo { animation: none; } }
 
         @media (max-width: 700px) {
           .tp-root { font-size: 14px; }
@@ -2089,6 +2133,8 @@
           box.appendChild(el("p", "tp-popup-name", store.name));
           box.appendChild(el("p", "tp-popup-note", store.note));
           box.appendChild(el("p", "tp-popup-addr", store.addr));
+          store.distEl = el("p", "tp-popup-dist"); // filled in once we know where the visitor is
+          box.appendChild(store.distEl);
           var a = el("a", "tp-dir", "Get directions");
           a.href = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(store.dest);
           a.target = "_blank";
@@ -2122,19 +2168,170 @@
               .addTo(map);
             bounds.push([s.lat, s.lng]);
           });
+          if (me) showMe();
           check();
         }
 
         // Build the map the first time it's actually on screen (it can live inside a
         // hidden section), and keep it sized correctly after rotations/route changes.
+        // GPS is only kept running while the map is on screen.
         function check() {
-          if (!visible()) return;
+          if (!visible()) { stopWatch(); return; }
+          if (wantLocation && watchId === null) startWatch();
           if (!map) {
             if (!loading) { loading = true; loadLeaflet(init); }
             return;
           }
           map.invalidateSize();
           if (!fitted) fit();
+        }
+
+        /* ---------------- Visitor location ----------------
+           Nothing is sent anywhere: the position stays in the visitor's browser. */
+        var btn = root.querySelector(".tp-locate-btn");
+        var statusEl = root.querySelector(".tp-locate-status");
+        var NEAR_KM = 60;             // "in Tokyo" — within this distance of a pin
+        var me = null;                // { lat, lng, acc }
+        var meMarker = null, meCircle = null, meEl = null;
+        var watchId = null, wantLocation = false, firstFix = true, heading = null, compassOn = false;
+
+        function setStatus(t) { statusEl.textContent = t; }
+
+        function fmt(m) {
+          var km = m / 1000, mi = m / 1609.344;
+          var a = m < 1000 ? (Math.round(m / 10) * 10) + " m" : km < 10 ? km.toFixed(1) + " km" : Math.round(km).toLocaleString() + " km";
+          var b = mi < 10 ? mi.toFixed(1) + " mi" : Math.round(mi).toLocaleString() + " mi";
+          return a + " (" + b + ")";
+        }
+
+        // Straight-line distance in metres (haversine), so it works before Leaflet loads.
+        function dist(aLat, aLng, bLat, bLng) {
+          var R = 6371008.8, r = Math.PI / 180;
+          var dLat = (bLat - aLat) * r, dLng = (bLng - aLng) * r;
+          var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+          return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+        }
+
+        function startWatch() {
+          if (!navigator.geolocation) return;
+          watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+        }
+        function stopWatch() {
+          if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+
+        function onPos(p) {
+          me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+          btn.disabled = false;
+          btn.textContent = "Center on me";
+
+          var nearest = null, nearestM = Infinity;
+          STORES.forEach(function (s) {
+            var m = dist(me.lat, me.lng, s.lat, s.lng);
+            if (s.distEl) s.distEl.textContent = fmt(m) + " from you, straight line";
+            if (m < nearestM) { nearestM = m; nearest = s; }
+          });
+          if (nearestM / 1000 <= NEAR_KM) {
+            setStatus("Closest: " + nearest.name + " — " + fmt(nearestM) + " away. Tap a pin to see how far it is.");
+          } else {
+            setStatus("You're about " + fmt(nearestM) + " from these stores. Distances are in each pin.");
+          }
+          if (map) showMe();
+        }
+
+        function onErr(e) {
+          if (me && e && e.code !== 1) return; // a GPS hiccup after we already have a fix: keep the last position
+          btn.disabled = false;
+          btn.textContent = "Show my location";
+          wantLocation = false;
+          stopWatch();
+          if (e && e.code === 1) {
+            setStatus("Location is blocked. To use it, allow location for this site in your browser settings, then try again.");
+          } else {
+            setStatus("Couldn't get your location. Check that location services are on and try again.");
+          }
+        }
+
+        function showMe() {
+          var L = window.L, ll = [me.lat, me.lng];
+          if (!meMarker) {
+            var icon = L.divIcon({
+              className: "tp-me-icon",
+              html: '<div class="tp-me"><div class="tp-me-halo"></div><div class="tp-me-cone"></div><div class="tp-me-dot"></div></div>',
+              iconSize: [18, 18],
+              iconAnchor: [9, 9]
+            });
+            meCircle = L.circle(ll, { radius: me.acc, color: "#1a73e8", weight: 1, opacity: .4, fillColor: "#1a73e8", fillOpacity: .1, interactive: false }).addTo(map);
+            meMarker = L.marker(ll, { icon: icon, zIndexOffset: 1000, keyboard: false, title: "You are here", alt: "You are here" })
+              .bindTooltip("You", { permanent: true, direction: "right", offset: [12, 0], className: "tp-me-label" })
+              .addTo(map);
+            meEl = meMarker.getElement().querySelector(".tp-me");
+            applyHeading();
+          } else {
+            meMarker.setLatLng(ll);
+            meCircle.setLatLng(ll).setRadius(me.acc);
+          }
+          if (firstFix) {
+            firstFix = false;
+            var nearM = Math.min.apply(null, STORES.map(function (s) { return dist(me.lat, me.lng, s.lat, s.lng); }));
+            // In Tokyo: zoom out just enough to show you and every pin. Far away: leave the map on Tokyo.
+            if (nearM / 1000 <= NEAR_KM) map.fitBounds(bounds.concat([ll]), { padding: [30, 30] });
+          }
+        }
+
+        // Compass: which way the phone is pointing.
+        function onOrient(e) {
+          var h = null;
+          if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading; // iPhone
+          else if (e.absolute && typeof e.alpha === "number") h = 360 - e.alpha;                                       // Android
+          if (h === null) return;
+          var screenAngle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+          heading = (h + screenAngle + 360) % 360;
+          applyHeading();
+        }
+        function applyHeading() {
+          if (!meEl || heading === null) return;
+          meEl.classList.add("tp-has-heading");
+          meEl.querySelector(".tp-me-cone").style.transform = "rotate(" + heading.toFixed(0) + "deg)";
+        }
+        function startCompass() {
+          if (compassOn || !window.DeviceOrientationEvent) return;
+          function listen() {
+            compassOn = true;
+            if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrient);
+            else window.addEventListener("deviceorientation", onOrient);
+          }
+          if (typeof DeviceOrientationEvent.requestPermission === "function") {
+            // iPhone asks separately for motion & orientation; must be called from the tap itself.
+            DeviceOrientationEvent.requestPermission().then(function (r) { if (r === "granted") listen(); }).catch(function () {});
+          } else {
+            listen();
+          }
+        }
+
+        btn.addEventListener("click", function () {
+          startCompass();
+          if (me && map) {
+            map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15));
+            return;
+          }
+          if (!navigator.geolocation) { setStatus("This browser can't share its location."); return; }
+          if (!window.isSecureContext) { setStatus("Location only works when the site is opened over https://."); return; }
+          wantLocation = true;
+          btn.disabled = true;
+          btn.textContent = "Finding you…";
+          setStatus("");
+          stopWatch();
+          startWatch();
+        });
+
+        // If the visitor already allowed location on an earlier visit, show it straight away (no prompt).
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions.query({ name: "geolocation" }).then(function (r) {
+            if (r.state === "granted" && !wantLocation) { wantLocation = true; check(); }
+          }).catch(function () {});
         }
 
         if (window.ResizeObserver) new ResizeObserver(check).observe(mapEl);
