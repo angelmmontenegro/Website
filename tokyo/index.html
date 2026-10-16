@@ -361,7 +361,7 @@
       function fmt(m) {
         var km = m / 1000, mi = m / 1609.344;
         var a = m < 1000 ? (Math.round(m / 10) * 10) + " m" : km < 10 ? km.toFixed(1) + " km" : Math.round(km).toLocaleString() + " km";
-        var b = mi < 10 ? mi.toFixed(1) + " mi" : Math.round(mi).toLocaleString() + " mi";
+        var b = mi < 0.1 ? (Math.round(m * 3.28084 / 10) * 10) + " ft" : mi < 10 ? mi.toFixed(1) + " mi" : Math.round(mi).toLocaleString() + " mi";
         return a + " (" + b + ")";
       }
 

@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:,">
+  <title>December Trip — Every Spot</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --panel: #111111;
+      --field: #1c1c1c;
+      --line: #3a3a3a;
+      --muted: #a3a3a3;
+      --sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    :focus-visible { outline: 2px solid #6aa8ff; outline-offset: 2px; }
+
+    /* Header */
+    .ep-head { padding: max(18px, env(safe-area-inset-top)) 20px 6px; }
+    .ep-head h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+    .ep-sub { margin: 0; max-width: 920px; color: #d0d0d0; font-size: 13px; line-height: 1.5; }
+
+    /* City jump buttons */
+    .ep-cities {
+      display: flex; gap: 6px; overflow-x: auto; padding: 12px 20px 10px;
+      scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    }
+    .ep-cities::-webkit-scrollbar { display: none; }
+    .ep-city {
+      flex: 0 0 auto; min-height: 40px; padding: 8px 13px;
+      border: 1px solid var(--line); border-radius: 999px;
+      background: transparent; color: #fff; font-size: 14px; white-space: nowrap; cursor: pointer;
+    }
+    .ep-city .n { margin-left: 5px; opacity: .6; font-variant-numeric: tabular-nums; }
+    .ep-city:hover { border-color: #fff; }
+    .ep-city[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
+
+    /* Legend */
+    .ep-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 16px; padding: 2px 20px 10px; }
+    .ep-cat { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; font-size: 13px; cursor: pointer; user-select: none; }
+    .ep-cat input { flex: 0 0 auto; width: 16px; height: 16px; margin: 1px 0 0; accent-color: #fff; cursor: pointer; }
+    .ep-dot { flex: 0 0 auto; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%; border: 2px solid #fff; }
+    .ep-cat b { font-weight: 600; }
+    .ep-cat .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .ep-cat small { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .ep-cat.off { opacity: .45; }
+
+    /* Search + location */
+    .ep-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 20px 12px; }
+    .ep-search {
+      flex: 1 1 240px; min-width: 0; height: 44px; padding: 0 12px;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: #fff;
+      font-size: 16px; /* 16px stops iPhone from zooming in on focus */
+    }
+    .ep-search::placeholder { color: #8a8a8a; }
+    .ep-locate {
+      flex: 0 0 auto; height: 44px; padding: 0 15px; border: 1px solid #fff; border-radius: 10px;
+      background: transparent; color: #fff; font-weight: 600; cursor: pointer;
+    }
+    .ep-locate:hover { background: #fff; color: #111; }
+    .ep-locate[disabled] { opacity: .5; cursor: progress; }
+    .ep-info { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+    .ep-info:empty { display: none; }
+
+    /* Map */
+    #map { flex: 1 1 auto; min-height: 55svh; position: relative; isolation: isolate; z-index: 0; background: #ddd; }
+    .leaflet-container { font-family: var(--sans); }
+
+    /* Footer */
+    .ep-foot { padding: 14px 20px max(16px, env(safe-area-inset-bottom)); color: #c8c8c8; font-size: 12px; line-height: 1.55; }
+    .ep-foot p { margin: 0; max-width: 920px; }
+
+    /* Popup */
+    .leaflet-popup-content { margin: 14px 16px; }
+    .ep-pop { color: #111; font-size: 14px; line-height: 1.4; }
+    .ep-pop h3 { margin: 0 0 6px; font-size: 16px; line-height: 1.25; }
+    .ep-chip { display: inline-block; margin: 0 0 8px; padding: 2px 9px; border-radius: 999px; color: #fff; font-size: 11px; font-weight: 600; }
+    .ep-pop p { margin: 0 0 6px; }
+    .ep-pop .addr { margin-bottom: 12px; color: #666; font-size: 13px; }
+    .ep-pop .dist { margin: -6px 0 12px; font-size: 13px; font-weight: 600; }
+    .ep-pop a.ep-dir {
+      display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 14px;
+      border-radius: 10px; background: #111; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none;
+    }
+    .ep-pop a.ep-dir:hover { background: #333; }
+
+    /* Visitor position: blue dot, pulsing halo, compass cone */
+    .ep-me-icon { background: none; border: 0; }
+    .ep-me { position: relative; width: 18px; height: 18px; }
+    .ep-me-dot { position: absolute; inset: 0; z-index: 2; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45); }
+    .ep-me-halo { position: absolute; inset: -9px; z-index: 0; border-radius: 50%; background: rgba(26,115,232,.25); animation: ep-pulse 2s ease-out infinite; }
+    .ep-me-cone {
+      display: none; position: absolute; left: 50%; top: 50%; z-index: 1; width: 60px; height: 50px;
+      margin: -50px 0 0 -30px; transform-origin: 50% 100%;
+      background: linear-gradient(to top, rgba(26,115,232,.7), rgba(26,115,232,.22));
+      clip-path: polygon(50% 100%, 4% 0, 96% 0);
+    }
+    .ep-me.has-heading .ep-me-cone { display: block; }
+    .leaflet-tooltip.ep-me-label { padding: 1px 6px; border: 0; border-radius: 0; background: #1a73e8; color: #fff; font-size: 11px; font-weight: 600; box-shadow: none; }
+    .leaflet-tooltip.ep-me-label::before { display: none; }
+    @keyframes ep-pulse { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .ep-me-halo { animation: none; } }
+
+    @media (max-width: 700px) {
+      .ep-head { padding: max(14px, env(safe-area-inset-top)) 16px 4px; }
+      .ep-head h1 { font-size: 20px; }
+      .ep-cities { padding: 10px 16px 8px; }
+      .ep-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; padding: 2px 16px 8px; }
+      .ep-tools { padding: 0 16px 10px; }
+      .ep-foot { padding-left: 16px; padding-right: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="ep-head">
+    <h1>December Trip — Every Spot</h1>
+    <p class="ep-sub">London Dec 28–Jan 2 · Brussels Jan 2–4 · Amsterdam Jan 4–6 · Berlin Jan 6–10 · Prague Jan 10–12 · Vienna Jan 12–14 · Budapest Jan 14–16 · Paris Jan 17–21. Every place from the research list, pinned. Tap a pin for why it's on the list, then rule it in or out.</p>
+  </header>
+
+  <nav class="ep-cities" aria-label="Jump to a city"></nav>
+  <div class="ep-legend" role="group" aria-label="Show or hide categories"></div>
+
+  <div class="ep-tools">
+    <input class="ep-search" type="search" placeholder="Search places or notes" aria-label="Search places or notes" autocomplete="off">
+    <button type="button" class="ep-locate">Show my location</button>
+    <p class="ep-info" aria-live="polite"></p>
+  </div>
+
+  <div id="map" role="region" aria-label="Map of trip spots"></div>
+
+  <footer class="ep-foot">
+    <p>Notes keep the honest caveats from the research (tourist traps, maybes, closures). A few pins sit outside their city — day trips like Windsor, Chelmsford, Étretat and Mont Saint-Michel, plus Heathrow and Sapa Market. One spot couldn't be pinned without guessing: Nanna, the bookshop boat at 11 Quai Montebello in Paris, facing Notre-Dame.</p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  (function () {
+    // [name, category, city, lat, lng, note, address, directions destination]
+    var DATA = [
+      ["Airbnb — Christian St, Whitechapel", "stays", "London", 51.51408, -0.06332, "His base, Dec 28–Jan 2 (booked)", "Christian St, Whitechapel E1 1QD", "Christian Street, Whitechapel, London"],
+      ["Big Ben", "sights", "London", 51.50093, -0.12772, "Ryan Trahan survival series stop — visited, not recommended", "Parliament Square, Westminster SW1P 3AD", "Big Ben, London"],
+      ["Borough Market", "food", "London", 51.50549, -0.08991, "From @london.compass's 7 things you'd regret missing list", "8 Bedale St, SE1 9AL", "Borough Market, London"],
+      ["Brick Lane", "fashion", "London", 51.52436, -0.07137, "Thrifting — loved the area, fun to walk around (@lolakmarquez)", "Brick Lane, Shoreditch E1 6SA", "Brick Lane, London"],
+      ["Britain Bethel, Chelmsford", "sights", "London", 51.681338, 0.473488, "Dec 29 morning; train from Liverpool St station", "1 Kingdom Way, West Hanningfield, Chelmsford CM2 8FW", "Britain Branch Office of Jehovah's Witnesses, Chelmsford"],
+      ["British Museum", "sights", "London", 51.51937, -0.12712, "World history museum, Bloomsbury", "Great Russell St, Bloomsbury", "British Museum, London"],
+      ["Churchill War Rooms", "museums", "London", 51.502181, -0.129454, "From @london.compass's 7 things you'd regret missing list", "Clive Steps, King Charles St, SW1A 2AQ", "Churchill War Rooms, London"],
+      ["Euston Station", "sights", "London", 51.52893, -0.13448, "Ryan Trahan survival series stop — visited, not recommended", "Euston Square, NW1", "Euston Station, London"],
+      ["Kew Gardens", "sights", "London", 51.48332, -0.28807, "Christmas at Kew — maybe, if there's time", "Kew Green, Richmond TW9 3AE", "Kew Gardens, London"],
+      ["National Portrait Gallery", "sights", "London", 51.50943, -0.12772, "Portraits, just off Trafalgar Square", "St Martin's Place, WC2H", "National Portrait Gallery, London"],
+      ["Natural History Museum", "sights", "London", 51.4962, -0.17642, "Right next to the V&A and Science Museum", "Cromwell Road, South Kensington", "Natural History Museum, London"],
+      ["OVO Arena Wembley", "nightlife", "London", 51.5581, -0.28298, "Defected NYE, Dec 31 — booked", "Arena Square, Wembley", "OVO Arena Wembley, London"],
+      ["Our Legacy", "fashion", "London", 51.51285, -0.13588, "His one London buy exception; US prices run ~3x", "1-2 Silver Place, Soho W1F 0JW", "Our Legacy, 1-2 Silver Place, London"],
+      ["Paloma Wool", "fashion", "London", 51.51286, -0.14143, "Paloma Wool's London store, Mayfair", "7-8 Conduit St, Mayfair W1S 2XF", "Paloma Wool, 7-8 Conduit Street, London"],
+      ["Shakespeare's Globe Theatre", "sights", "London", 51.508052, -0.097015, "Stand inside it (@london.compass list)", "21 New Globe Walk, SE1 9DT", "Shakespeare's Globe, London"],
+      ["Soho & Covent Garden walk", "sights", "London", 51.51295, -0.12247, "Walk ending with a pub pint (@london.compass list); pin on Covent Garden", "Covent Garden, WC2", "Covent Garden, London"],
+      ["Supreme London", "fashion", "London", 51.51294, -0.13394, "Supreme's London store, Soho", "2 Peter St, Soho W1F 0AA", "Supreme, 2 Peter Street, London"],
+      ["Tate Britain", "museums", "London", 51.49085, -0.12714, "The 90s: Art and Fashion (Enninful) — his must-go, Oct 8 2026–Feb 14 2027", "Millbank, Westminster", "Tate Britain, London"],
+      ["Tate Modern", "museums", "London", 51.5076, -0.099352, "Frida: The Making of an Icon (ticketed) + Tarek Atoui, Turbine Hall (free)", "Bankside, Southwark", "Tate Modern, London"],
+      ["Tower of London", "sights", "London", 51.5097, -0.07552, "From @london.compass's 7 things you'd regret missing list", "Tower Hill, EC3N 4AB", "Tower of London, London"],
+      ["V&A East", "museums", "London", 51.54178, -0.013676, "The Music Is Black (maybe) + Bowie archive at the Storehouse", "East Bank, 107 Carpenters Rd, E20 2AR", "V&A East Museum, London"],
+      ["V&A South Kensington", "museums", "London", 51.49549, -0.17451, "Burberry Trench exhibition, free, closes Jan 3", "Cromwell Road, South Kensington", "Victoria and Albert Museum, London"],
+      ["Vintage Threads", "fashion", "London", 51.5141, -0.135556, "Emma Chamberlain rec — handpicked vintage/reworked, good for a jacket or jeans", "82 Berwick St, Soho W1F 8TP", "Vintage Threads, London"],
+      ["Virgin Atlantic Clubhouse, Heathrow", "food", "London", 51.470071, -0.460712, "Casey Neistat on the Heathrow lounge: 'never seen a lounge like that' (spa, pool, food)", "Terminal 3, Heathrow Airport", "Virgin Atlantic Clubhouse, London Heathrow"],
+      ["Windsor Castle", "sights", "London", 51.483893, -0.604411, "Day trip (@london.compass list)", "Castle Hill, Windsor SL4 1NJ", "Windsor Castle, Windsor"],
+      ["World's End Vivienne Westwood", "fashion", "London", 51.48324, -0.1775, "Iconic boutique: orb jewelry, tartan, the World's End clock — insane stock (@connorxel)", "430 King's Road, Chelsea SW10 0LJ", "World's End Vivienne Westwood, London"],
+      ["Avenue Louise / Toison d'Or luxury row", "fashion", "Brussels", 50.83722, 4.35924, "The luxury shopping street by his hotel", "Avenue de la Toison d'Or, Ixelles", "Avenue de la Toison d'Or, Brussels"],
+      ["Grand-Place", "sights", "Brussels", 50.846787, 4.352355, "The main square", "Grote Markt, 1000 Brussels", "Grand-Place, Brussels"],
+      ["Le Louise Hotel Brussels – MGallery", "stays", "Brussels", 50.836193, 4.357024, "His hotel, Jan 2–4 (booked)", "40 Avenue de la Toison d'Or, 1050 Brussels", "Le Louise Hotel Brussels, Brussels"],
+      ["Amsterdam Centraal", "sights", "Amsterdam", 52.379129, 4.900275, "Light Festival cruise boats leave from here; evening cruise planned Jan 5", "Stationsplein", "Amsterdam Centraal, Amsterdam"],
+      ["Anne Frank House", "sights", "Amsterdam", 52.375217, 4.883974, "Tickets online only; he's targeting Jan 5 or 6", "Westermarkt 20 (entrance)", "Anne Frank House, Westermarkt 20, Amsterdam"],
+      ["Bunk Amsterdam", "stays", "Amsterdam", 52.388079, 4.913778, "His actual stay, Jan 4–6 (booked) — Bunk Pod, €65.64 total, non-refundable", "Hagedoornplein 2, Amsterdam-Noord", "BUNK Hotel Amsterdam, Amsterdam"],
+      ["Concrete Matter", "fashion", "Amsterdam", 52.37229, 4.887636, "Drew's vintage pick — \"really really cool store, great selection\"; now in the Nine Streets (old Haarlemmerdijk shop closed)", "Gasthuismolensteeg 12, Nine Streets", "Concrete Matter, Gasthuismolensteeg 12, Amsterdam"],
+      ["Het Scheepvaartmuseum", "museums", "Amsterdam", 52.371603, 4.914665, "Drew Joiner: \"one of my absolute favorite museums\" — mid-century paintings", "Kattenburgerplein 1", "Het Scheepvaartmuseum, Amsterdam"],
+      ["Moco Museum", "museums", "Amsterdam", 52.358738, 4.8819, "Drew Joiner pick; KAWS exhibit", "Honthorststraat 20, Museumplein", "Moco Museum, Amsterdam"],
+      ["Noordermarkt", "food", "Amsterdam", 52.379426, 4.886765, "Market in the Jordaan — big organic market Saturday; smaller market Monday (his Jan 4 visit day)", "Noordermarkt, Jordaan", "Noordermarkt, Amsterdam"],
+      ["Stedelijk Museum", "museums", "Amsterdam", 52.358018, 4.879754, "Yayoi Kusama retrospective", "Museumplein 10", "Stedelijk Museum, Amsterdam"],
+      ["The Hoxton, Amsterdam", "stays", "Amsterdam", 52.371849, 4.887365, "Casey Neistat: \"get room 514\"", "Herengracht 255", "The Hoxton, Herengracht 255, Amsterdam"],
+      ["Van Gogh Museum", "museums", "Amsterdam", 52.358374, 4.881061, "Yoshitoshi exhibition, closes Jan 4 — his closing-day visit", "Museumplein 6", "Van Gogh Museum, Amsterdam"],
+      ["19grams", "food", "Berlin", 52.533075, 13.380085, "Coffee (Benjamin Julian rec); this is the Chaussee location, one of several", "Chausseestraße 36, Mitte", "19grams Chaussee, Berlin"],
+      ["Berghain", "nightlife", "Berlin", 52.51111, 13.44306, "The famous door; near Friedrichshain", "Am Wriezener Bahnhof, Friedrichshain", "Berghain, Berlin"],
+      ["Berliner Dom", "sights", "Berlin", 52.519, 13.400922, "Berlin Cathedral, on Museum Island (Solosophie pick)", "Am Lustgarten, Mitte", "Berliner Dom, Berlin"],
+      ["Berliner Fernsehturm", "sights", "Berlin", 52.520906, 13.409496, "TV Tower viewpoint at Alexanderplatz (Solosophie pick)", "Panoramastraße 1A, Mitte", "Berliner Fernsehturm, Berlin"],
+      ["Boros Collection", "museums", "Berlin", 52.523488, 13.384129, "Strong yes; timed tickets, book ahead", "Reinhardtstraße 20, Mitte", "Boros Collection, Berlin"],
+      ["Brandenburger Tor", "sights", "Berlin", 52.516287, 13.377768, "Brandenburg Gate (Solosophie pick)", "Pariser Platz 1, Mitte", "Brandenburger Tor, Berlin"],
+      ["Breggs", "food", "Berlin", 52.523525, 13.399375, "TikTok-famous breakfast / egg sandwiches (Alnaika pick)", "Oranienburger Straße 84, Mitte", "Breggs, Berlin"],
+      ["Café Father Carpenter", "food", "Berlin", 52.524488, 13.406528, "Breakfast pick (Benjamin Julian)", "Münzstraße 21, Mitte", "Father Carpenter, Berlin"],
+      ["Christmas Garden Berlin", "sights", "Berlin", 52.45607, 13.305966, "Soft yes — winter light trail at the Botanical Garden", "Königin-Luise-Straße 6, Lichterfelde (Botanischer Garten)", "Christmas Garden Berlin, Botanischer Garten, Berlin"],
+      ["Circus Hostel", "stays", "Berlin", 52.530139, 13.401844, "His hostel, Jan 6–10 (booked)", "Weinbergsweg 1a, Mitte", "Circus Hostel, Weinbergsweg 1a, Berlin"],
+      ["Computerspielemuseum", "museums", "Berlin", 52.517492, 13.441977, "Computer games museum — Solosophie's hidden-gem pick", "Karl-Marx-Allee 93A, Friedrichshain", "Computerspielemuseum, Berlin"],
+      ["Core Tex Records", "fashion", "Berlin", 52.499639, 13.425587, "Punk/hardcore record store; Kreuzberg institution since 1988", "Oranienstraße 3, Kreuzberg", "Core Tex Records, Berlin"],
+      ["Déjà Vu Museum", "museums", "Berlin", 52.522892, 13.407886, "Optical-illusion / interactive museum near Alexanderplatz", "Rochstraße 14C, Mitte", "DeJa Vu Museum, Berlin"],
+      ["East Side Gallery", "sights", "Berlin", 52.503046, 13.444399, "Longest surviving stretch of the Wall, painted; runs ~1.3 km along Mühlenstraße", "Mühlenstraße 73, Friedrichshain", "East Side Gallery, Berlin"],
+      ["Flughafen Tempelhof", "sights", "Berlin", 52.473376, 13.419474, "Former airport turned huge public park (Tempelhofer Feld)", "Tempelhofer Feld, Oderstraße 34", "Tempelhofer Feld, Berlin"],
+      ["HUMANA", "fashion", "Berlin", 52.516691, 13.454247, "Big second-hand/vintage chain — Frankfurter Tor branch, one of several in Berlin", "Frankfurter Tor 3, Friedrichshain", "HUMANA, Frankfurter Tor 3, Berlin"],
+      ["Hahayoureugly Berlin", "fashion", "Berlin", 52.513, 13.453165, "Vintage shop (Benjamin Julian rec)", "Warschauer Straße 76, Friedrichshain", "Hahayoureugly Berlin, Warschauer Straße 76, Berlin"],
+      ["Haus Schwarzenberg", "museums", "Berlin", 52.52425, 13.402613, "Art courtyards / cultural center by Hackescher Markt (Alnaika pick)", "Rosenthaler Straße 39, Mitte", "Haus Schwarzenberg, Berlin"],
+      ["KINK Bar & Restaurant", "food", "Berlin", 52.53185, 13.411839, "Dinner pick (Benjamin Julian); bar + restaurant", "Schönhauser Allee 176, Prenzlauer Berg", "KINK Bar & Restaurant, Berlin"],
+      ["KW Institute for Contemporary Art", "museums", "Berlin", 52.526751, 13.395045, "15 min walk from Boros", "Auguststraße 69, Mitte", "KW Institute for Contemporary Art, Berlin"],
+      ["Kebab Kitchen", "food", "Berlin", 52.524534, 13.40317, "Kebab spot (Alnaika pick)", "Rosenthaler Straße 46, Mitte", "Kebab Kitchen, Berlin"],
+      ["Klunkerkranich", "nightlife", "Berlin", 52.48225, 13.432104, "Rooftop bar on top of the Neukölln Arcaden mall", "Karl-Marx-Straße 66, Neukölln", "Klunkerkranich, Berlin"],
+      ["Markthalle Neun", "food", "Berlin", 52.502044, 13.431797, "Historic food market hall, Kreuzberg (Solosophie pick)", "Eisenbahnstraße 42/43, Kreuzberg", "Markthalle Neun, Berlin"],
+      ["Munchies", "food", "Berlin", 52.489097, 13.392636, "Burgers/tacos snack spot, Kreuzberg (Alnaika pick)", "Schenkendorfstraße 1, Kreuzberg", "Munchies, Schenkendorfstraße 1, Berlin"],
+      ["Museumsinsel", "sights", "Berlin", 52.521389, 13.395556, "Museum Island — the big museum cluster (Solosophie pick)", "Bodestraße 3, Mitte", "Museumsinsel, Berlin"],
+      ["Ristorante A Mano", "food", "Berlin", 52.519183, 13.427318, "Italian dinner pick (Benjamin Julian)", "Strausberger Platz 2, Friedrichshain", "A Mano, Strausberger Platz 2, Berlin"],
+      ["Rooftop Bar Baret", "nightlife", "Berlin", 52.517327, 13.400663, "'Date night' rooftop on top of the Humboldt Forum (Alnaika pick)", "Schloßplatz, Mitte (Humboldt Forum roof)", "Baret, Humboldt Forum, Berlin"],
+      ["SOFI Bakery", "food", "Berlin", 52.526179, 13.40101, "Bakery/breakfast pick (Benjamin Julian), in the Sophie-Gips-Höfe courtyard", "Sophienstraße 21, Mitte", "SOFI Bakery, Berlin"],
+      ["Schloss Charlottenburg", "sights", "Berlin", 52.520801, 13.295658, "Charlottenburg Palace (Solosophie pick)", "Spandauer Damm 10–22, Charlottenburg", "Schloss Charlottenburg, Berlin"],
+      ["Shakespeare and Sons", "fashion", "Berlin", 52.512711, 13.453077, "Bookshop (Solosophie pick)", "Warschauer Straße 74, Friedrichshain", "Shakespeare and Sons, Berlin"],
+      ["Sophieneck", "food", "Berlin", 52.526361, 13.398563, "Traditional German dinner (Alnaika pick)", "Große Hamburger Straße 37, Mitte", "Sophieneck, Berlin"],
+      ["Urban Nation", "museums", "Berlin", 52.498701, 13.356558, "Street art museum (Solosophie pick)", "Bülowstraße 7, Schöneberg", "Urban Nation, Berlin"],
+      ["Viktoriapark", "sights", "Berlin", 52.488221, 13.380019, "Park with monument and waterfall; viewpoint over the city", "Kreuzbergstraße 15, Kreuzberg", "Viktoriapark, Berlin"],
+      ["Vintage Revivals", "fashion", "Berlin", 52.546516, 13.412776, "Vintage shop (Benjamin Julian rec); also has a Münzstraße branch", "Schönhauser Allee 127, Prenzlauer Berg", "Vintage Revivals, Berlin"],
+      ["Vivienne Westwood World's End Berlin", "fashion", "Berlin", 52.527454, 13.405052, "Angel's must-go; the Berlin World's End store — in Mitte, not on Tauentzienstraße as first thought", "Mulackstraße 26, Mitte", "Vivienne Westwood, Mulackstraße 26, Berlin"],
+      ["Voo Store", "fashion", "Berlin", 52.50107, 13.421167, "Concept store, Kreuzberg", "Oranienstraße 24, Kreuzberg", "Voo Store, Berlin"],
+      ["Wild At Heart / Tiki Heart", "nightlife", "Berlin", 52.497581, 13.431054, "Bar/music venue (Benjamin Julian rec); its Tiki Heart café listing shows permanently closed — check before going", "Wiener Straße 20, Kreuzberg", "Wild At Heart, Wiener Straße 20, Berlin"],
+      ["Zur Klappe", "nightlife", "Berlin", 52.493073, 13.387043, "Famous techno club in a former public toilet under Yorckstraße", "Yorckstraße 2, Kreuzberg 61", "Zur Klappe, Berlin"],
+      ["9ítka", "nightlife", "Prague", 50.069773, 14.411237, "Riverside bar on the Smíchov embankment (Honest Guide budget list)", "Hořejší nábřeží 486/9", "9ítka, Prague"],
+      ["AghaRTA Jazz Centrum", "nightlife", "Prague", 50.086068, 14.42202, "Date-night rec: one of the best live jazz shows the creator had seen", "Železná 491/16", "AghaRTA Jazz Centrum, Prague"],
+      ["Basilica of St. James", "sights", "Prague", 50.088331, 14.424756, "Basilica of St. James in Old Town, free-things list", "Malá Štupartská 635", "Basilica of St. James, Prague"],
+      ["Charles Bridge", "sights", "Prague", 50.08639, 14.41194, "Bridge + the Pietà 'Depeche Mode statue'; Kanye's 'Diamonds' video shot around here", "Karlův most", "Charles Bridge, Prague"],
+      ["Church of St. Francis of Assisi", "sights", "Prague", 50.08628, 14.414233, "Church interior by Charles Bridge, on the free-things list", "Křižovnické nám. 3", "Church of St. Francis of Assisi, Prague"],
+      ["Crawling Babies (Kampa Park)", "sights", "Prague", 50.084138, 14.408357, "David Černý's crawling baby sculptures at Kampa, free-things list", "Kampa Park, Malá Strana", "Crawling Babies, Kampa, Prague"],
+      ["Cross Club", "nightlife", "Prague", 50.108198, 14.443303, "Pairs with DOX, same neighborhood", "Plynární 23, Holešovice", "Cross Club, Prague"],
+      ["Czech Inn", "stays", "Prague", 50.07181, 14.446439, "His hostel, Jan 10–12 (booked)", "Francouzská 240/76", "Czech Inn, Prague"],
+      ["DOX Centre for Contemporary Art", "museums", "Prague", 50.106796, 14.447806, "Pairs with Cross Club, same neighborhood", "Poupětova 1, Holešovice", "DOX Centre for Contemporary Art, Prague"],
+      ["Duplex", "nightlife", "Prague", 50.082454, 14.426551, "Rooftop club overlooking Wenceslas Square", "Václavské náměstí 831/21", "Duplex, Prague"],
+      ["Franciscan Garden", "sights", "Prague", 50.0821, 14.423953, "Hidden Franciscan Garden off Vodičkova, free-things list", "Vodičkova, Nové Město", "Franciscan Garden, Prague"],
+      ["Franz Kafka Head", "sights", "Prague", 50.08166, 14.420836, "Rotating Franz Kafka head sculpture by Quadrio, free-things list", "Charvátova, Nové Město", "Franz Kafka Head, Prague"],
+      ["Golden Lane", "sights", "Prague", 50.092052, 14.40409, "Tiny colorful lane inside the castle grounds, free-things list", "Zlatá ulička, Prague Castle", "Golden Lane, Prague"],
+      ["Havlíčkovy sady (Grébovka)", "sights", "Prague", 50.068515, 14.446855, "Havlíčkovy Sady gardens in Vinohrady, free-things list", "Havlíčkovy sady, Vinohrady", "Havlíčkovy sady, Prague"],
+      ["Infinity Book Tower", "sights", "Prague", 50.087383, 14.417362, "Infinity Book Tower inside the Municipal Library, free-things list", "Mariánské nám. 98/1", "Infinity Book Tower, Prague"],
+      ["John Lennon Wall", "sights", "Prague", 50.0862417, 14.4069472, "The Lennon Wall in Malá Strana, free-things list", "Velkopřevorské náměstí, Malá Strana", "John Lennon Wall, Prague"],
+      ["Joystick Bar", "nightlife", "Prague", 50.083673, 14.426731, "Arcade bar near Wenceslas Square (Honest Guide)", "Jindřišská 5", "Joystick Bar, Prague"],
+      ["Kafe & hrnky", "food", "Prague", 50.088126, 14.399044, "Café on Nerudova from Honest Guide's must-visit list", "Nerudova 244/25", "Kafe & hrnky, Prague"],
+      ["Kampa", "sights", "Prague", 50.084849, 14.408355, "Kampa island park and neighborhood in Malá Strana (Honest Guide)", "Kampa, Malá Strana", "Kampa Island, Prague"],
+      ["Karlovy Lázně", "nightlife", "Prague", 50.085405, 14.413926, "Five-story 'biggest club in Central Europe' — comments call it a tourist trap; go for the meme, not the music", "Novotného lávka 198/13", "Karlovy Lázně, Prague"],
+      ["Kavárna Mlýnská", "food", "Prague", 50.082461, 14.407157, "Café on Kampa from Honest Guide's must-visit list", "Všehrdova 449/14", "Kavárna Mlýnská, Prague"],
+      ["Kayak Beach Bar", "nightlife", "Prague", 50.06654, 14.414748, "Riverside bar with free kayaking (Honest Guide budget list)", "Rašínovo nábřeží, Výtoň", "Kayak Beach Bar, Prague"],
+      ["Kubistická lampa (Cubist Lamp Post)", "sights", "Prague", 50.083396, 14.423848, "Cubist lamp post oddity near Wenceslas Square (Honest Guide)", "Jungmannovo nám.", "Cubist Lamp Post, Prague"],
+      ["Lucerna Passage", "sights", "Prague", 50.081142, 14.425713, "Passage with the upside-down horse statue, free-things list", "Štěpánská 61, Nové Město", "Lucerna Passage, Prague"],
+      ["Museum Kampa", "museums", "Prague", 50.083653, 14.408139, "In Defiance: Medek & Koblasa — he said 'need to see this'; open Mondays", "U Sovových mlýnů 503/2", "Museum Kampa, Prague"],
+      ["Na Hradbách", "food", "Prague", 50.063601, 14.422004, "Cheap beer garden at Vyšehrad, Honest Guide budget pick", "V Pevnosti, Vyšehrad", "Na Hradbách, Prague"],
+      ["Na skleničku", "nightlife", "Prague", 50.083482, 14.426927, "All-you-can-drink wine bar (Honest Guide)", "Jindřišská 901", "Na skleničku, Prague"],
+      ["Nová radnice (New Town Hall)", "sights", "Prague", 50.087133, 14.417887, "New Town Hall, Honest Guide hidden gem", "Mariánské nám. 2", "Nová radnice, Prague"],
+      ["Nový Svět", "sights", "Prague", 50.090922, 14.391395, "Quiet romantic streets tucked below Prague Castle (Honest Guide)", "Nový Svět, Hradčany", "Nový Svět, Prague"],
+      ["Náplavka", "sights", "Prague", 50.069789, 14.414642, "Náplavka riverside embankment, free-things list", "Rašínovo nábřeží", "Náplavka, Prague"],
+      ["Old Town Bridge Tower (downstairs museum)", "museums", "Prague", 50.086209, 14.413693, "Tiny downstairs museum in the tower most tourists miss (Honest Guide)", "Karlův most, Staré Město end", "Old Town Bridge Tower, Prague"],
+      ["Old Town Square", "sights", "Prague", 50.087569, 14.421181, "Old Town Square and the Jan Hus Memorial, free-things list", "Staroměstské náměstí", "Old Town Square, Prague"],
+      ["Petřín Hill", "sights", "Prague", 50.081655, 14.396817, "Hill and gardens above Malá Strana, free-things list", "Petřínské sady 1", "Petřín Hill, Prague"],
+      ["Piss Statue", "sights", "Prague", 50.0880944, 14.4102444, "Černý's Piss statue outside the Kafka Museum, free-things list", "Cihelná, Malá Strana", "Piss Statue, Prague"],
+      ["Prague Astronomical Clock", "sights", "Prague", 50.087044, 14.420669, "The Orloj on Old Town Hall, from the 23 free things list", "Staroměstské nám. 1", "Prague Astronomical Clock, Prague"],
+      ["Prague Castle", "sights", "Prague", 50.091082, 14.401633, "Crossbow shooting + torture chamber inside; guard change; get the ticket that includes Golden Lane", "Hradčany", "Prague Castle, Prague"],
+      ["Rudolfinum", "museums", "Prague", 50.089794, 14.415465, "Rudolfinum Gallery interior, on the free-things list", "Alšovo nábřeží 79/12", "Rudolfinum, Prague"],
+      ["Sapa Market", "food", "Prague", 50.003122, 14.467627, "Prague's Vietnamese wholesale market complex in Libuš (Drew Binsky)", "Libušská 319/126, Libuš", "Sapa Market, Prague"],
+      ["Skautský Institut v Rybárně", "food", "Prague", 50.08293, 14.407916, "Newer Scout Institute branch on Kampa (Honest Guide)", "U Sovových mlýnů 134/1", "Skautský Institut v Rybárně, Prague"],
+      ["Skautský institut", "food", "Prague", 50.086609, 14.419841, "Scout Institute: locals' community and refreshment space by Old Town Square (Honest Guide)", "Staroměstské nám. 4/1", "Skautský institut, Prague"],
+      ["Smallest House in Prague", "sights", "Prague", 50.09174, 14.424235, "The smallest house in Prague, free-things list curiosity", "Anežská 1043/4", "Smallest House in Prague, Prague"],
+      ["St. Vitus Cathedral", "sights", "Prague", 50.090873, 14.400589, "Cathedral inside the castle grounds; exterior on the free-things list", "III. nádvoří 48/2", "St. Vitus Cathedral, Prague"],
+      ["The bench (Charles Bridge, Malá Strana end)", "sights", "Prague", 50.087313, 14.406863, "'11/10 bench in Prague' — the bench is along this riverside stretch, exact spot kept vague by the creator", "Malá Strana end of Charles Bridge", "Lesser Town Bridge Towers, Prague"],
+      ["Tucet", "food", "Prague", 50.087674, 14.407699, "Bar and restaurant in Malá Strana (Honest Guide)", "Míšeňská 10", "Tucet, Prague"],
+      ["V Kotcích", "sights", "Prague", 50.084498, 14.421165, "Old lane between Old Town Square and Wenceslas Square (Honest Guide)", "V Kotcích, Staré Město", "V Kotcích, Prague"],
+      ["Vítkov National Monument", "sights", "Prague", 50.088717, 14.449982, "Vítkov National Monument and its views, free-things list", "U Památníku, Žižkov", "Vítkov National Monument, Prague"],
+      ["Waldstein Garden", "sights", "Prague", 50.090411, 14.407917, "Baroque garden under the castle, free-things list", "Letenská 123/4, Malá Strana", "Waldstein Garden, Prague"],
+      ["Albertinaplatz", "sights", "Vienna", 48.20414, 16.36898, "Before Sunrise: nighttime view of the State Opera by the Albertina", "Albertinaplatz", "Albertinaplatz, Vienna"],
+      ["Bruder", "nightlife", "Vienna", 48.199076, 16.356402, "'Vienna's Best Cocktail Bar' (Oriana Findlay)", "Windmühlgasse 20", "Bruder, Vienna"],
+      ["Café Aida", "food", "Vienna", 48.207978, 16.372012, "Classic pink café chain, Stephansplatz branch (Max Nomad)", "Singerstraße 1", "Café Aida, Vienna"],
+      ["Café Central", "food", "Vienna", 48.210397, 16.365364, "Grand historic café in the Palais Ferstel (Max Nomad)", "Herrengasse 14", "Café Central, Vienna"],
+      ["Café Ritter", "food", "Vienna", 48.213331, 16.319626, "Classic Viennese coffeehouse (Oriana Findlay)", "Ottakringer Straße 117", "Café Ritter, Vienna"],
+      ["Café Sacher", "food", "Vienna", 48.203902, 16.369735, "Home of the original Sachertorte (Max Nomad)", "Philharmonikerstraße 4", "Café Sacher, Vienna"],
+      ["Café Sperl", "food", "Vienna", 48.19987, 16.36129, "Iconic coffeehouse, Before Sunrise phone-call scene", "Gumpendorfer Straße 11", "Café Sperl, Vienna"],
+      ["Café Weimar", "food", "Vienna", 48.223337, 16.351737, "Classic Viennese coffeehouse (Oriana Findlay)", "Währinger Straße 68", "Café Weimar, Vienna"],
+      ["Donaukanal", "sights", "Vienna", 48.211793, 16.379258, "Before Sunrise: canal stroll where they meet the improvising poet", "Donaukanal, near Schwedenplatz", "Donaukanal, Vienna"],
+      ["Friedhof der Namenlosen", "sights", "Vienna", 48.15978, 16.5012, "Cemetery of the Nameless: quiet Danube cemetery from Before Sunrise", "Alberner Hafen, 11th district", "Friedhof der Namenlosen, Vienna"],
+      ["Gasthaus Quell", "food", "Vienna", 48.189244, 16.330266, "Traditional Viennese Gasthaus (Oriana Findlay)", "Reindorfgasse 19", "Gasthaus Quell, Vienna"],
+      ["Griechenbeisl", "food", "Vienna", 48.2107, 16.377213, "Historic restaurant, among Vienna's oldest inns (Max Nomad)", "Fleischmarkt 11", "Griechenbeisl, Vienna"],
+      ["Hofburg Palace", "sights", "Vienna", 48.205661, 16.364738, "Hofburg imperial palace (Wyatt & Reyka)", "Michaelerkuppel", "Hofburg, Vienna"],
+      ["Hundertwasserhaus", "sights", "Vienna", 48.207436, 16.393844, "Hundertwasser's colorful, wavy apartment house (Max Nomad)", "Kegelgasse 36", "Hundertwasserhaus, Vienna"],
+      ["Hyatt Regency Vienna", "stays", "Vienna", 48.185262, 16.383448, "His hotel, Jan 12–14 (booked on points)", "Arsenalstraße 10", "Hyatt Regency Vienna, Vienna"],
+      ["Kikko Bā", "food", "Vienna", 48.196865, 16.365868, "Japanese izakaya (Oriana Findlay)", "Schleifmühlgasse 8", "Kikko Bā, Vienna"],
+      ["Kleines Café", "food", "Vienna", 48.20658, 16.37434, "Before Sunrise café stop: drinks and the fortune teller scene", "Franziskanerplatz 3", "Kleines Café, Vienna"],
+      ["Kohlmarkt", "fashion", "Vienna", 48.208806, 16.367694, "Luxury shopping street running to the Hofburg", "Kohlmarkt", "Kohlmarkt, Vienna"],
+      ["Kunsthistorisches Museum", "museums", "Vienna", 48.203881, 16.3616, "Imperial art collection facing Maria-Theresien-Platz (Max Nomad)", "Maria-Theresien-Platz", "Kunsthistorisches Museum, Vienna"],
+      ["Loco's Gemüse Kebab", "food", "Vienna", 48.187834, 16.332646, "Local kebab spot (Oriana Findlay)", "Sechshauser Straße 29", "Loco's Gemüse Kebab, Vienna"],
+      ["Lower Belvedere", "museums", "Vienna", 48.196708, 16.379983, "Erika Giovanna Klien: Everything Is Motion", "Rennweg 6A", "Lower Belvedere, Vienna"],
+      ["Maria am Gestade", "sights", "Vienna", 48.21251, 16.37097, "14th-century Gothic church tucked in the center (Before Sunrise)", "Salvatorgasse 12", "Maria am Gestade, Vienna"],
+      ["Maria-Theresien-Platz", "sights", "Vienna", 48.20457, 16.3609, "Before Sunrise: Jesse and Céline wander between the two museums", "Maria-Theresien-Platz", "Maria-Theresien-Platz, Vienna"],
+      ["Mozarthaus", "museums", "Vienna", 48.20778, 16.37528, "Mozart's only surviving Vienna apartment, now a museum (Max Nomad)", "Domgasse 5", "Mozarthaus, Vienna"],
+      ["Mölker Steig", "sights", "Vienna", 48.21263, 16.36296, "Romantic cobblestone alleyway from Before Sunrise", "Mölker Steig", "Mölker Steig, Vienna"],
+      ["Naschmarkt", "food", "Vienna", 48.198305, 16.362725, "Vienna's big food market; Wyatt & Reyka tried the apple cakes", "Mariahilf, 1060 Vienna", "Naschmarkt, Vienna"],
+      ["Palais Liechtenstein", "museums", "Vienna", 48.2226, 16.3596, "Baroque palace and museum (Oriana Findlay)", "Fürstengasse 1", "Palais Liechtenstein, Vienna"],
+      ["Prater & Riesenrad", "sights", "Vienna", 48.216664, 16.395899, "Prater amusement park and the giant Riesenrad wheel (Max Nomad)", "Gaudeegasse 1", "Prater, Vienna"],
+      ["Rathausplatz", "sights", "Vienna", 48.210646, 16.358755, "Square in front of Vienna City Hall (Wyatt & Reyka)", "Rathausplatz", "Rathausplatz, Vienna"],
+      ["Salm Bräu", "food", "Vienna", 48.196767, 16.380819, "Austrian dinner spot: Tafelspitz, schnitzel, creamed spinach (Wyatt & Reyka)", "Rennweg 8", "Salm Bräu, Vienna"],
+      ["Schönbrunn Palace", "sights", "Vienna", 48.184516, 16.311865, "Palace plus its Christmas Market: ice skating, Kaiserschmarrn, mulled wine", "Hietzing, Vienna", "Schönbrunn Palace, Vienna"],
+      ["Skopik & Lohn", "food", "Vienna", 48.220139, 16.376567, "Modern Viennese dining (Oriana Findlay)", "Leopoldsgasse 17", "Skopik & Lohn, Vienna"],
+      ["Stephansdom", "sights", "Vienna", 48.208411, 16.373471, "St. Stephen's Cathedral (Wyatt & Reyka)", "Stephansplatz 3", "Stephansdom, Vienna"],
+      ["Teuchtler", "fashion", "Vienna", 48.19962, 16.35701, "Old-school vinyl shop from Before Sunrise, listening-booth scene", "Windmühlgasse 10", "Teuchtler, Vienna"],
+      ["Upper Belvedere", "museums", "Vienna", 48.19126, 16.3798, "MANDATORY: Klimt's The Kiss in the original; palace gardens are free", "Prinz Eugen-Straße 27", "Upper Belvedere, Vienna"],
+      ["Vienna State Opera", "sights", "Vienna", 48.203331, 16.369609, "Fidelio candidate, Jan 12", "Opernring 2", "Vienna State Opera, Vienna"],
+      ["Volksgarten", "sights", "Vienna", 48.206791, 16.361056, "Rose garden park beside the Hofburg (Wyatt & Reyka)", "Heldenplatz", "Volksgarten, Vienna"],
+      ["Votivkirche", "sights", "Vienna", 48.21566, 16.3577, "Neo-Gothic church glimpsed in Before Sunrise", "Rooseveltplatz 8", "Votivkirche, Vienna"],
+      ["Wiener Konzerthaus", "sights", "Vienna", 48.200884, 16.377326, "Klangforum Wien concert candidate, Jan 12", "Lothringerstraße 20", "Wiener Konzerthaus, Vienna"],
+      ["Zollamtsteg", "sights", "Vienna", 48.20974, 16.385, "Before Sunrise: small bridge over the Wien River, street performers", "Zollamtsteg", "Zollamtsteg, Vienna"],
+      ["Zwölf Apostelkeller", "food", "Vienna", 48.209781, 16.375655, "Historic wine-cellar restaurant (Max Nomad)", "Sonnenfelsgasse 3", "Zwölf Apostelkeller, Vienna"],
+      ["Buda Castle", "sights", "Budapest", 47.496191, 19.03961, "Castle Hill palace; take the escalator up", "Szent György tér, Castle Hill", "Buda Castle, Budapest"],
+      ["Csendes Létterem", "nightlife", "Budapest", 47.492783, 19.060201, "Quieter ruin bar / vintage café, the anti-Szimpla", "Ferenczy István u. 5", "Csendes Létterem, Budapest"],
+      ["Drum Cafe", "food", "Budapest", 47.496317, 19.059081, "'Solid Lángos'", "Dob u. 2", "Drum Cafe, Budapest"],
+      ["Fisherman's Bastion", "sights", "Budapest", 47.502181, 19.034785, "Fairytale-like towers; best views over the Danube and Parliament", "Szentháromság tér, Buda", "Fisherman's Bastion, Budapest"],
+      ["Gellért Thermal Bath", "sights", "Budapest", 47.483838, 19.051707, "Art Nouveau thermal bath at the foot of Gellért Hill — reported closed for a long renovation, check before going", "Kelenhegyi út 4", "Gellért Thermal Bath, Budapest"],
+      ["Great Market Hall", "food", "Budapest", 47.487051, 19.058327, "Huge indoor market; food stalls upstairs", "Vámház krt. 1-3", "Great Market Hall, Budapest"],
+      ["Hungarian Parliament Building", "sights", "Budapest", 47.507136, 19.045709, "Iconic riverside landmark; see it lit up gold at night", "Kossuth Lajos tér 1-3", "Hungarian Parliament Building, Budapest"],
+      ["Hungarikum Bisztró", "food", "Budapest", 47.503513, 19.047911, "Traditional Hungarian dinner spot near Parliament", "Steindl Imre u. 13", "Hungarikum Bisztró, Budapest"],
+      ["Irgalmasok Veli Bej Bath", "sights", "Budapest", 47.519107, 19.037197, "Thermal bath that 'isn't expensive or crowded' — explicit rec", "Árpád fejedelem útja 7", "Irgalmasok Veli Bej Bath, Budapest"],
+      ["JUDAS", "fashion", "Budapest", 47.497093, 19.062118, "Vintage streetwear bar/shop on the vintage run", "Wesselényi utca 11", "JUDAS, Budapest"],
+      ["KOMONDORS", "fashion", "Budapest", 47.497869, 19.064402, "Vintage shop + café/bar in one", "Wesselényi utca 21", "KOMONDORS, Budapest"],
+      ["Kimpton BEM Budapest", "stays", "Budapest", 47.512067, 19.037925, "His hotel, Jan 14–16 (booked)", "Bem József tér 3", "Kimpton BEM Budapest, Budapest"],
+      ["Kádár Étkezde", "food", "Budapest", 47.499649, 19.064798, "Traditional Hungarian eatery, old-school canteen", "Klauzál tér 9", "Kádár Étkezde, Budapest"],
+      ["Museum of Ethnography", "museums", "Budapest", 47.511504, 19.081371, "Folk culture museum in its new City Park building", "Dózsa György út 35, City Park", "Museum of Ethnography, Budapest"],
+      ["Museum of Fine Arts", "museums", "Budapest", 47.515761, 19.076791, "Gauguin exhibition; City Park area, near Széchenyi Baths", "Dózsa György út 41, Heroes' Square", "Museum of Fine Arts, Budapest"],
+      ["New York Café", "food", "Budapest", 47.498724, 19.070452, "Famously opulent historic café", "Erzsébet krt. 9-11", "New York Café, Budapest"],
+      ["Old Mama – Goulash & Langosh Bar", "food", "Budapest", 47.497108, 19.051087, "Goulash & lángos bar on Vörösmarty tér", "Vörösmarty tér 5", "Old Mama Goulash & Langosh Bar, Budapest"],
+      ["Pontoon", "nightlife", "Budapest", 47.499698, 19.046188, "Riverside bar on the Danube by the Chain Bridge — summer venue, may be shut in January", "Id. Antall József rkp. 1", "Pontoon, Budapest"],
+      ["Párisi Passage", "food", "Budapest", 47.493252, 19.054904, "Goulash lunch under the crystal dome; elegant café", "Ferenciek tere 10", "Párisi Passage, Budapest"],
+      ["RETROCK", "fashion", "Budapest", 47.498208, 19.05559, "Designer + vintage store", "Anker köz 2", "RETROCK, Budapest"],
+      ["ReClaim Vintage Shop", "fashion", "Budapest", 47.500898, 19.06143, "Curated vintage garments, Király utca", "Király u. 37", "ReClaim Vintage Shop, Budapest"],
+      ["Rudas Baths", "sights", "Budapest", 47.489187, 19.047806, "Ottoman-era thermal bath by Gellért Hill", "Döbrentei tér 9", "Rudas Baths, Budapest"],
+      ["Shoes on the Danube Bank", "sights", "Budapest", 47.503982, 19.044896, "Memorial of iron shoes on the riverbank, south of Parliament", "Id. Antall József rkp.", "Shoes on the Danube Bank, Budapest"],
+      ["St. Stephen's Basilica", "sights", "Budapest", 47.500937, 19.053947, "'Breathtakingly ornate' — explicit rec", "Szent István tér 1", "St. Stephen's Basilica, Budapest"],
+      ["Street Food Karavan", "food", "Budapest", 47.497155, 19.063083, "Street food court next to Szimpla; lunch stop", "Kazinczy u. 18", "Street Food Karavan, Budapest"],
+      ["Szimpla Kert", "nightlife", "Budapest", 47.496993, 19.063392, "The original ruin bar", "Kazinczy u. 14", "Szimpla Kert, Budapest"],
+      ["Széchenyi Thermal Bath", "sights", "Budapest", 47.518735, 19.082194, "Biggest thermal bath; full-day spa day", "Állatkerti krt. 9-11, City Park", "Széchenyi Thermal Bath, Budapest"],
+      ["Zoo Café", "food", "Budapest", 47.489527, 19.058495, "Animal café — staff bring a python, chameleon, cockatoo and more to your table", "Fejér György u. 3", "Zoo Café, Budapest"],
+      ["ALATONE", "fashion", "Paris", 48.864053, 2.349351, "Second-hand selection; best for tees, finds under $15", "15 Rue de Turbigo (also 96 Rue Rambuteau)", "ALATONE, Paris"],
+      ["Andy Warhol: Line and Image — Musée du Luxembourg", "museums", "Paris", 48.848811, 2.333955, "Closes Jan 10 — misses his Jan 17–21 leg", "19 Rue de Vaugirard", "Musée du Luxembourg, Paris"],
+      ["Arc de Triomphe", "sights", "Paris", 48.873756, 2.294946, "Climb the spiral staircase for panoramic views", "Place Charles de Gaulle", "Arc de Triomphe, Paris"],
+      ["BAM'S VINTAGE", "fashion", "Paris", 48.864387, 2.349609, "Cave-like vintage store", "7 Rue Tiquetonne, 75002", "BAM'S VINTAGE, Paris"],
+      ["BRUT", "fashion", "Paris", 48.864711, 2.359199, "Curated vintage racks (covers BRUT + BRUT Vintage)", "3 Rue Réaumur, 75003", "BRUT, Paris"],
+      ["Bisou", "nightlife", "Paris", 48.864104, 2.365979, "No menu — personalized cocktails made to your taste", "15 Bd du Temple, 75003", "Bisou, Paris"],
+      ["Boulangerie du Champ de Mars", "food", "Paris", 48.860026, 2.300642, "Pastries and baguettes stop", "16 Avenue Rapp, 75007", "Boulangerie du Champ de Mars, Paris"],
+      ["Brandy Melville flagship", "fashion", "Paris", 48.86381, 2.33248, "3-story flagship", "Rue de Rivoli", "Brandy Melville, Paris"],
+      ["Caveau de la Huchette", "nightlife", "Paris", 48.852797, 2.346296, "Jazz cellar since 1946; ~€18–20 entry, students €10 with ID", "5 Rue de la Huchette, 75005", "Caveau de la Huchette, Paris"],
+      ["Chez Janou", "food", "Paris", 48.856676, 2.367209, "Famous chocolate mousse, near Place des Vosges", "2 Rue Roger Verlomme, Le Marais", "Chez Janou, Paris"],
+      ["Coulée Verte René-Dumont", "sights", "Paris", 48.849452, 2.371483, "Elevated park walk, the original High Line", "Above Avenue Daumesnil, 12th", "Coulée Verte René-Dumont, Paris"],
+      ["Cour Damoye", "sights", "Paris", 48.854368, 2.370467, "Cobbled passage off Place de la Bastille", "12 Place de la Bastille, 75011", "Cour Damoye, Paris"],
+      ["Dover Street Market Paris", "fashion", "Paris", 48.85779, 2.360424, "DSM's Paris outpost in the Marais", "35-37 Rue des Francs Bourgeois, 75004", "Dover Street Market Paris, Paris"],
+      ["Eiffel Tower", "sights", "Paris", 48.858248, 2.294465, "Emma rode to the top", "Av. Gustave Eiffel", "Eiffel Tower, Paris"],
+      ["Enfants Riches Déprimés", "fashion", "Paris", 48.864439, 2.364263, "ERD flagship, vault-like interior", "79 Rue Charlot, Le Marais", "Enfants Riches Déprimés, Paris"],
+      ["FOTO AUTOMAT", "sights", "Paris", 48.885427, 2.338792, "Vintage photobooth: €6 B&W strips in 4 min", "53 Rue des Trois Frères, Montmartre", "FOTO AUTOMAT, Paris"],
+      ["FREE P'STAR", "fashion", "Paris", 48.858014, 2.35268, "Cheap vintage, €1 bargain bins, requires digging", "93 Rue de la Verrerie, Le Marais", "FREE P'STAR, Paris"],
+      ["Folderol", "food", "Paris", 48.865227, 2.369015, "Ice cream + natural wine bar by Canal Saint-Martin", "10 Rue du Grand Prieuré, 75011", "Folderol, Paris"],
+      ["Fourche Noire", "fashion", "Paris", 48.863646, 2.364883, "Vintage store + archive fashion", "62 Rue de Saintonge, 75003", "Fourche Noire, Paris"],
+      ["Fruttini", "food", "Paris", 48.849232, 2.325023, "Fruit sorbet served in the fruit", "24 Rue Saint-Placide, 75006", "Fruttini, Paris"],
+      ["Galeries Lafayette Haussmann", "fashion", "Paris", 48.873629, 2.33211, "Iconic department store under the glass dome", "40 Boulevard Haussmann", "Galeries Lafayette Haussmann, Paris"],
+      ["Grand Palais", "museums", "Paris", 48.8661, 2.3125, "Cézanne et nous exhibition, closes Jan 17", "Avenue Winston-Churchill", "Grand Palais, Paris"],
+      ["Husbands Paris", "fashion", "Paris", 48.866823, 2.337347, "Tailored menswear flagship", "57 Rue de Richelieu", "Husbands Paris, Paris"],
+      ["KIS Paris", "fashion", "Paris", 48.864224, 2.360031, "Vintage store + coffee corner", "65 Rue de Bretagne, 75003", "KIS Paris, Paris"],
+      ["La Patate Douce", "nightlife", "Paris", 48.866071, 2.35726, "Listening bar + radio; cool bar alternative to clubs", "10 Rue Montgolfier, 75003", "La Patate Douce, Paris"],
+      ["La Renommée", "food", "Paris", 48.86113, 2.343145, "Fancy dinner spot", "95 Rue Saint-Honoré, 75001", "La Renommée, Paris"],
+      ["Le Bon Marché", "fashion", "Paris", 48.851209, 2.324481, "Carries Common Projects — the Achilles Low is a Paris buy (mid-soldes + VAT refund)", "24 Rue de Sèvres", "Le Bon Marché, Paris"],
+      ["Le Mansart", "nightlife", "Paris", 48.882107, 2.333525, "Cute cheap bar in the 9th; locals begged to keep it secret", "1 Rue Mansart, 75009", "Le Mansart, Paris"],
+      ["Le Violon Dingue", "nightlife", "Paris", 48.847631, 2.348489, "Bar near the Panthéon, good music, cave club downstairs", "46 Rue de la Montagne Sainte-Geneviève", "Le Violon Dingue, Paris"],
+      ["Less is More", "fashion", "Paris", 48.873184, 2.363143, "Vintage Levi's ~€75; owner is a 'denim wizard'", "22 Rue des Vinaigriers, 75010", "Less is More, Paris"],
+      ["Louvre", "museums", "Paris", 48.861, 2.335861, "Winged Victory, Mona Lisa; Emma: beautiful lit up at night", "Rue de Rivoli, 75001", "Louvre, Paris"],
+      ["MEP (Maison Européenne de la Photographie)", "museums", "Paris", 48.855117, 2.359152, "Penn & Fashion exhibition, closes Jan 17", "5/7 Rue de Fourcy", "Maison Européenne de la Photographie, Paris"],
+      ["Marché Bastille", "food", "Paris", 48.854549, 2.369807, "Big open-air market, Thu + Sun mornings", "Boulevard Richard-Lenoir", "Marché Bastille, Paris"],
+      ["Maxim's / 55b", "nightlife", "Paris", 48.867429, 2.322397, "55b jazz + disco nights at Maxim's; 'famous, still cool'", "3 Rue Royale, 75008", "Maxim's, Paris"],
+      ["Mont Saint-Michel", "sights", "Paris", 48.635834, -1.511389, "Day trip option — ~3.5 hrs, check tides, January = no crowds", "Mont Saint-Michel, Normandy", "Mont Saint-Michel, France"],
+      ["Musée Carnavalet", "museums", "Paris", 48.857157, 2.362643, "Paris history museum, courtyard", "23 Rue de Sévigné", "Musée Carnavalet, Paris"],
+      ["Musée Rodin", "museums", "Paris", 48.855321, 2.315865, "Sculpture rooms and garden", "77 Rue de Varenne", "Musée Rodin, Paris"],
+      ["Musée de l'Orangerie", "museums", "Paris", 48.863788, 2.322674, "Water Lilies + 'Monet, Painting Time' (Sep 30, 2026–Jan 25, 2027)", "Jardin des Tuileries", "Musée de l'Orangerie, Paris"],
+      ["Musée du quai Branly", "museums", "Paris", 48.860888, 2.297898, "Premières Nations exhibition, closes Jan 17", "37 Quai Jacques Chirac", "Musée du quai Branly, Paris"],
+      ["Numéro Deux", "fashion", "Paris", 48.88409, 2.33226, "Vintage Levi's private showroom near the Moulin Rouge, appointment-style, no storefront", "near Moulin Rouge, Pigalle", "Moulin Rouge, Paris"],
+      ["Pachamama", "nightlife", "Paris", 48.852084, 2.372517, "5-floor club near Bastille — 'the most fun I've ever had going out'", "46-48 Rue du Faubourg Saint-Antoine", "Pachamama, Paris"],
+      ["Palace of Versailles", "sights", "Paris", 48.804328, 2.120936, "Hall of Mirrors, gardens, chapel", "Place d'Armes, Versailles", "Palace of Versailles, Versailles"],
+      ["Palais Garnier", "sights", "Paris", 48.871923, 2.331528, "Closes for a 5-year renovation from summer 2027 — his last window to see it", "Place de l'Opéra", "Palais Garnier, Paris"],
+      ["Paloma Wool", "fashion", "Paris", 48.858327, 2.364373, "Paris pop-up spot (extended run) — check it's still on before going", "51 Rue de Turenne, Le Marais", "Paloma Wool, Paris"],
+      ["Parc Floral de Paris", "sights", "Paris", 48.836429, 2.443065, "L'Odyssée Lumineuse, Sun Jan 17 at 5:30 PM — booked", "Route de la Pyramide, Bois de Vincennes", "Parc Floral de Paris, Paris"],
+      ["Perruche", "food", "Paris", 48.873891, 2.327622, "Rooftop — sunset + Eiffel Tower view", "Printemps de l'Homme, 2 Rue du Havre, 9th floor", "Perruche, Paris"],
+      ["Petit Palais", "museums", "Paris", 48.86604, 2.31453, "Fine-arts museum across from the Grand Palais", "Avenue Winston-Churchill", "Petit Palais, Paris"],
+      ["Pristine", "food", "Paris", 48.876305, 2.34119, "Tiny restaurant, sharing plates", "8 Rue de Maubeuge, 75009", "Pristine, Paris"],
+      ["Pétrin Café", "food", "Paris", 48.882024, 2.332422, "Iced matcha and coffee", "11 Rue Mansart, 75009", "Pétrin Café, Paris"],
+      ["Rendez-Vous Store", "fashion", "Paris", 48.861356, 2.360879, "Curated stop on the Marais menswear route", "8 Rue Charlot, 75003", "Rendez-Vous Store, Paris"],
+      ["Rue Crémieux", "sights", "Paris", 48.8467474, 2.3706572, "Pastel-painted pedestrian street", "Rue Crémieux, 12th, near Gare de Lyon", "Rue Crémieux, Paris"],
+      ["Saint Laurent Rive Droite Café", "food", "Paris", 48.866988, 2.305647, "Saint Laurent's café; Mon–Sat 10 AM–6 PM, Sun 11 AM–6 PM", "37 Avenue Montaigne", "Saint Laurent Rive Droite Café, Paris"],
+      ["Shakespeare and Company", "sights", "Paris", 48.85259, 2.34708, "Before trilogy spot; iconic Left Bank bookshop", "37 Rue de la Bûcherie", "Shakespeare and Company, Paris"],
+      ["Silencio", "nightlife", "Paris", 48.868909, 2.343402, "David Lynch-designed members' club", "142 Rue Montmartre, 75002", "Silencio, Paris"],
+      ["Spa La Fantaisie", "sights", "Paris", 48.8754, 2.343656, "2-hour spa treatment in the 9th", "24 Rue Cadet, 75009 (Hôtel La Fantaisie)", "Spa La Fantaisie, Paris"],
+      ["Specimen Burger", "food", "Paris", 48.851902, 2.33501, "Local's #1 smash burger; Time Out 6th worldwide", "3 Rue Guisarde, Saint-Germain", "Specimen Burger, Paris"],
+      ["Spootnik", "nightlife", "Paris", 48.864333, 2.354828, "Underground audiophile cocktail bar, moody, good cocktails", "57 Rue des Gravilliers, 75003", "Spootnik, Paris"],
+      ["Sunset picnic spot near Pont Marie", "sights", "Paris", 48.8528056, 2.3574444, "'Best spot in Paris to eat baguettes, drink wine, and watch the sun go down'", "Quay near Pont Marie", "Pont Marie, Paris"],
+      ["Supreme Paris", "fashion", "Paris", 48.859269, 2.359996, "Supreme's Paris store", "20 Rue Barbette, Le Marais", "Supreme Paris, Paris"],
+      ["The Knot (Nexus)", "nightlife", "Paris", 48.897302, 2.4051, "Techno club, formerly Nexus", "100 Avenue du Général Leclerc, Pantin", "The Knot (Nexus), Pantin"],
+      ["The Vintage", "fashion", "Paris", 48.864906, 2.365529, "Family-owned vintage Levi's — listed as temporarily closed; check before going", "25 Boulevard du Temple, 75003", "The Vintage, Paris"],
+      ["Unfeigned Gear", "fashion", "Paris", 48.859886, 2.361143, "Minimalist gear/clothing stop", "22 Rue de la Perle, Le Marais", "Unfeigned Gear, Paris"],
+      ["Vedettes du Pont Neuf", "sights", "Paris", 48.857417, 2.341031, "Seine river cruise departure point", "1 Square du Vert-Galant, Île de la Cité", "Vedettes du Pont Neuf, Paris"],
+      ["Étretat", "sights", "Paris", 49.7064, 0.2, "Day trip option — chalk cliffs and Porte d'Aval arch, ~2 hrs", "Étretat, Normandy", "Étretat, France"]
+    ];
+
+    var CATS = {
+      fashion:   { label: "Fashion",         color: "#d2362c", desc: "vintage, designer, flagships" },
+      food:      { label: "Food & drink",    color: "#e07b24", desc: "restaurants, cafés, markets, bakeries" },
+      sights:    { label: "Sights",          color: "#2563eb", desc: "landmarks, parks, viewpoints, touristy stuff" },
+      museums:   { label: "Museums & shows", color: "#7c3aed", desc: "museums, galleries, exhibitions" },
+      nightlife: { label: "Nightlife",       color: "#191919", desc: "bars, clubs, jazz spots" },
+      stays:     { label: "Stays",           color: "#0e9f6e", desc: "where you're sleeping (booked)" }
+    };
+    var CAT_ORDER = ["fashion", "food", "sights", "museums", "nightlife", "stays"];
+    var CITIES = [
+      ["London",    [51.5074, -0.1278], 11],
+      ["Brussels",  [50.8503,  4.3517], 13],
+      ["Amsterdam", [52.3728,  4.8936], 13],
+      ["Berlin",    [52.5200, 13.4050], 12],
+      ["Prague",    [50.0800, 14.4300], 12],
+      ["Vienna",    [48.2082, 16.3738], 12],
+      ["Budapest",  [47.4979, 19.0500], 12],
+      ["Paris",     [48.8566,  2.3522], 12]
+    ];
+
+    var info = document.querySelector(".ep-info");
+    var searchEl = document.querySelector(".ep-search");
+    var btn = document.querySelector(".ep-locate");
+
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    }
+    function norm(s) { return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+
+    /* ---------- Map + pins ---------- */
+    var map = L.map("map", { zoomControl: false });
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Canvas draws 257 circles quickly; tolerance makes the small pins easier to tap.
+    var renderer = L.canvas({ padding: 0.5, tolerance: 8 });
+
+    var pins = DATA.map(function (d) {
+      var p = { name: d[0], cat: d[1], city: d[2], lat: d[3], lng: d[4], note: d[5], addr: d[6], dest: d[7], shown: true };
+      p.text = norm(p.name + " " + p.note);
+      p.marker = L.circleMarker([p.lat, p.lng], {
+        renderer: renderer, radius: 7, weight: 2, color: "#fff", opacity: 1,
+        fillColor: CATS[p.cat].color, fillOpacity: 0.92
+      }).bindPopup(function () { return popupFor(p); }, { maxWidth: 290, minWidth: 230 }).addTo(map);
+      p.marker.on("popupopen", function () { openPin = p; });
+      p.marker.on("popupclose", function () { if (openPin === p) openPin = null; });
+      return p;
+    });
+    var openPin = null;
+    var allBounds = L.latLngBounds(pins.map(function (p) { return [p.lat, p.lng]; }));
+    map.fitBounds(allBounds, { padding: [30, 30] });
+
+    function popupFor(p) {
+      var c = CATS[p.cat];
+      var box = el("div", "ep-pop");
+      box.appendChild(el("h3", null, p.name));
+      var chip = el("span", "ep-chip", c.label + " · " + p.city);
+      chip.style.background = c.color;
+      box.appendChild(chip);
+      box.appendChild(el("p", "note", p.note));
+      box.appendChild(el("p", "addr", p.addr));
+      if (me) box.appendChild(el("p", "dist", fmt(dist(me.lat, me.lng, p.lat, p.lng)) + " from you, straight line"));
+      var a = el("a", "ep-dir", "Get directions");
+      a.href = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(p.dest);
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      box.appendChild(a);
+      return box;
+    }
+
+    /* ---------- City jump buttons ---------- */
+    var cityBar = document.querySelector(".ep-cities");
+    var cityBtns = [];
+    function cityButton(label, count, go) {
+      var b = el("button", "ep-city");
+      b.type = "button";
+      b.appendChild(document.createTextNode(label));
+      b.appendChild(el("span", "n", String(count)));
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", function () { setActive(b); go(); });
+      cityBar.appendChild(b);
+      cityBtns.push(b);
+      return b;
+    }
+    function setActive(b) { cityBtns.forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); }); }
+    var allBtn = cityButton("All", pins.length, function () { map.flyToBounds(allBounds, { padding: [30, 30], duration: 1.2 }); });
+    CITIES.forEach(function (c) {
+      var n = pins.filter(function (p) { return p.city === c[0]; }).length;
+      cityButton(c[0], n, function () { map.flyTo(c[1], c[2], { duration: 1.2 }); });
+    });
+    setActive(allBtn);
+
+    /* ---------- Legend toggles + search ---------- */
+    var enabled = {};
+    var legend = document.querySelector(".ep-legend");
+    CAT_ORDER.forEach(function (k) {
+      var c = CATS[k];
+      enabled[k] = true;
+      var n = pins.filter(function (p) { return p.cat === k; }).length;
+      var lab = el("label", "ep-cat");
+      var cb = el("input"); cb.type = "checkbox"; cb.checked = true;
+      var dot = el("span", "ep-dot"); dot.style.background = c.color;
+      var txt = el("span");
+      txt.appendChild(el("b", null, c.label));
+      txt.appendChild(document.createTextNode(" "));
+      txt.appendChild(el("span", "n", String(n)));
+      txt.appendChild(el("small", null, c.desc));
+      lab.appendChild(cb); lab.appendChild(dot); lab.appendChild(txt);
+      cb.addEventListener("change", function () {
+        enabled[k] = cb.checked;
+        lab.classList.toggle("off", !cb.checked);
+        applyFilter();
+      });
+      legend.appendChild(lab);
+    });
+
+    var countMsg = "";
+    function applyFilter() {
+      var q = norm(searchEl.value.trim());
+      var shown = 0;
+      pins.forEach(function (p) {
+        var vis = enabled[p.cat] && (!q || p.text.indexOf(q) !== -1);
+        if (vis !== p.shown) {
+          if (vis) p.marker.addTo(map); else { p.marker.closePopup(); map.removeLayer(p.marker); }
+          p.shown = vis;
+        }
+        if (vis) shown++;
+      });
+      countMsg = shown === pins.length ? "" : (shown === 0 ? "No pins match." : "Showing " + shown + " of " + pins.length + " pins.");
+      renderInfo();
+    }
+    searchEl.addEventListener("input", applyFilter);
+
+    /* ---------- Visitor location ----------
+       Nothing is sent anywhere: the position stays in the visitor's browser. */
+    var NEAR_KM = 60;
+    var me = null, meMarker = null, meCircle = null, meEl = null;
+    var watchId = null, wantLocation = false, userAsked = false, firstFix = true;
+    var heading = null, compassOn = false, locMsg = "";
+
+    function renderInfo() {
+      var near = nearestMsg();
+      info.textContent = [near || locMsg, countMsg].filter(Boolean).join(" ");
+    }
+    function fmt(m) {
+      var km = m / 1000, mi = m / 1609.344;
+      var a = m < 1000 ? (Math.round(m / 10) * 10) + " m" : km < 10 ? km.toFixed(1) + " km" : Math.round(km).toLocaleString() + " km";
+      var b = mi < 0.1 ? (Math.round(m * 3.28084 / 10) * 10) + " ft" : mi < 10 ? mi.toFixed(1) + " mi" : Math.round(mi).toLocaleString() + " mi";
+      return a + " (" + b + ")";
+    }
+    function dist(aLat, aLng, bLat, bLng) {
+      var R = 6371008.8, r = Math.PI / 180;
+      var dLat = (bLat - aLat) * r, dLng = (bLng - aLng) * r;
+      var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(aLat * r) * Math.cos(bLat * r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+    function nearest() {
+      var best = null, bestM = Infinity;
+      pins.forEach(function (p) {
+        if (!p.shown) return;
+        var m = dist(me.lat, me.lng, p.lat, p.lng);
+        if (m < bestM) { bestM = m; best = p; }
+      });
+      return best ? { p: best, m: bestM } : null;
+    }
+    function nearestMsg() {
+      if (!me) return "";
+      var n = nearest();
+      if (!n) return "";
+      if (n.m / 1000 <= NEAR_KM) return "Closest pin: " + n.p.name + " (" + n.p.city + ") — " + fmt(n.m) + " away.";
+      return "You're about " + fmt(n.m) + " from the nearest pin (" + n.p.name + ", " + n.p.city + ").";
+    }
+
+    function startWatch() {
+      if (!navigator.geolocation || watchId !== null) return;
+      watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+    }
+    function stopWatch() {
+      if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    // Only run GPS while the page is actually open in front of them.
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) stopWatch(); else if (wantLocation) startWatch();
+    });
+
+    function onPos(pos) {
+      me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+      btn.disabled = false;
+      btn.textContent = "Center on me";
+      locMsg = "";
+      showMe();
+      if (openPin) openPin.marker.getPopup().update(); // refresh the distance in an open popup
+      renderInfo();
+    }
+    function onErr(e) {
+      if (me && e && e.code !== 1) return; // GPS hiccup after a fix: keep the last position
+      btn.disabled = false;
+      btn.textContent = "Show my location";
+      wantLocation = false;
+      stopWatch();
+      if (!userAsked) return; // silent auto-start failed; say nothing
+      locMsg = e && e.code === 1
+        ? "Location is blocked. To use it, allow location for this site in your browser settings, then try again."
+        : "Couldn't get your location. Check that location services are on and try again.";
+      renderInfo();
+    }
+
+    function showMe() {
+      var ll = [me.lat, me.lng];
+      if (!meMarker) {
+        var icon = L.divIcon({
+          className: "ep-me-icon",
+          html: '<div class="ep-me"><div class="ep-me-halo"></div><div class="ep-me-cone"></div><div class="ep-me-dot"></div></div>',
+          iconSize: [18, 18], iconAnchor: [9, 9]
+        });
+        meCircle = L.circle(ll, { radius: me.acc, color: "#1a73e8", weight: 1, opacity: 0.4, fillColor: "#1a73e8", fillOpacity: 0.1, interactive: false }).addTo(map);
+        meMarker = L.marker(ll, { icon: icon, zIndexOffset: 1000, keyboard: false, title: "You are here", alt: "You are here" })
+          .bindTooltip("You", { permanent: true, direction: "right", offset: [12, 0], className: "ep-me-label" })
+          .addTo(map);
+        meEl = meMarker.getElement().querySelector(".ep-me");
+        applyHeading();
+      } else {
+        meMarker.setLatLng(ll);
+        meCircle.setLatLng(ll).setRadius(me.acc);
+      }
+      if (firstFix && userAsked) {
+        firstFix = false;
+        var n = nearest();
+        // Near a city on the list: jump to where you are. Far away: leave the map alone.
+        if (n && n.m / 1000 <= NEAR_KM) { setActive(null); map.flyTo(ll, Math.max(map.getZoom(), 15), { duration: 1 }); }
+      }
+    }
+
+    // Compass: which way the phone is pointing.
+    function onOrient(e) {
+      var h = null;
+      if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading; // iPhone
+      else if (e.absolute && typeof e.alpha === "number") h = 360 - e.alpha;                                       // Android
+      if (h === null) return;
+      var screenAngle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+      heading = (h + screenAngle + 360) % 360;
+      applyHeading();
+    }
+    function applyHeading() {
+      if (!meEl || heading === null) return;
+      meEl.classList.add("has-heading");
+      meEl.querySelector(".ep-me-cone").style.transform = "rotate(" + heading.toFixed(0) + "deg)";
+    }
+    function startCompass() {
+      if (compassOn || !window.DeviceOrientationEvent) return;
+      function listen() {
+        compassOn = true;
+        if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrient);
+        else window.addEventListener("deviceorientation", onOrient);
+      }
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        // iPhone asks separately for motion & orientation; this has to come from the tap itself.
+        DeviceOrientationEvent.requestPermission().then(function (r) { if (r === "granted") listen(); }).catch(function () {});
+      } else {
+        listen();
+      }
+    }
+
+    btn.addEventListener("click", function () {
+      startCompass();
+      if (me) {
+        setActive(null);
+        map.flyTo([me.lat, me.lng], Math.max(map.getZoom(), 15), { duration: 1 });
+        return;
+      }
+      if (!navigator.geolocation) { locMsg = "This browser can't share its location."; renderInfo(); return; }
+      if (!window.isSecureContext) { locMsg = "Location only works when the page is opened over https://."; renderInfo(); return; }
+      userAsked = true;
+      wantLocation = true;
+      btn.disabled = true;
+      btn.textContent = "Finding you…";
+      locMsg = "";
+      renderInfo();
+      stopWatch();
+      startWatch();
+    });
+
+    // If they already allowed location on an earlier visit, show the dot straight away (no prompt, no map jump).
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: "geolocation" }).then(function (r) {
+        if (r.state === "granted" && !wantLocation) { wantLocation = true; startWatch(); }
+      }).catch(function () {});
+    }
+  })();
+  </script>
+</body>
+</html>
