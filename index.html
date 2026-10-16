@@ -270,6 +270,7 @@
         <nav class="landing-nav" aria-label="Primary">
           <a href="#/photographs">photos</a>
           <a href="#/blog">blog</a>
+          <a href="#/tokyo">tokyo</a>
           <a href="https://www.instagram.com/angleorangel/" target="_blank" rel="noreferrer">@angleorangel</a>
         </nav>
       </div>
@@ -1890,6 +1891,263 @@
     </main>
   </section>
 
+  <section class="view tokyo-view" data-route="/tokyo" hidden>
+    <nav class="route-bar" aria-label="Tokyo navigation">
+      <a href="#/" aria-label="Back to landing page">← back</a>
+      <a href="#/blog">blog</a>
+    </nav>
+    <main class="blog">
+      <!-- ============================================================
+           TOKYO PICKUPS MAP — self-contained component
+           Everything for the map lives between this line and the END line.
+           To move it: cut/paste this whole block. To remove it: delete it.
+           Loads Leaflet 1.9.4 from unpkg the first time the map is visible.
+           All CSS classes are prefixed "tp-" so nothing leaks into the site.
+           ============================================================ -->
+      <div class="tp-root" id="tokyo-pickups">
+        <h2 class="tp-title">Tokyo Pickups</h2>
+
+        <ul class="tp-legend">
+          <li>
+            <span class="tp-swatch" style="background:#d2362c" role="img" aria-label="Red"></span>
+            <span><strong>Converse</strong> — please buy: CANVAS ALL STAR J HI, black, size 27.5cm (28.0cm if they feel tight), ¥16,500. His US size is 10. Check the heel stamp says MADE IN JAPAN.</span>
+          </li>
+          <li>
+            <span class="tp-swatch" style="background:#191919" role="img" aria-label="Black"></span>
+            <span><strong>Margiela</strong> — please buy: REPLICA "Letter Never Sent" eau de parfum, 100mL, ¥31,900. Tokyo exclusive.</span>
+          </li>
+          <li>
+            <span class="tp-swatch" style="background:#2563eb" role="img" aria-label="Blue"></span>
+            <span><strong>visvim</strong> — just visit: no buy, just check this store out, it's really cool. And call me when you're there — I want to see it.</span>
+          </li>
+          <li>
+            <span class="tp-swatch" style="background:#0e9f6e" role="img" aria-label="Green"></span>
+            <span><strong>T.T (Taiga Takahashi)</strong> — just visit: same, just check it out and call me when you're there, I want to see it.</span>
+          </li>
+        </ul>
+
+        <div class="tp-map" role="region" aria-label="Map of Tokyo stores"></div>
+
+        <p class="tp-footer">Converse: the Harajuku flagship is the best bet for the All Star J. Margiela: Tokyo-only, sold at these 10 fragrance stores (plus 9 fashion boutiques). T.T's only permanent store is in Kyoto — the Tokyo pin is their ISETAN SALONE pop-up in Roppongi, October 14–18 only.</p>
+      </div>
+
+      <style>
+        .tp-root { box-sizing: border-box; width: min(100%, 1200px); font-size: 15px; line-height: 1.45; }
+        .tp-root *, .tp-root *::before, .tp-root *::after { box-sizing: border-box; }
+        .tp-title { margin: 0 0 36px; font-size: inherit; font-weight: 400; line-height: 1.2; }
+        .tp-legend { list-style: none; max-width: 680px; margin: 0 0 28px; padding: 0; display: grid; gap: 12px; }
+        .tp-legend li { display: flex; gap: 10px; align-items: flex-start; }
+        .tp-legend strong { font-weight: 600; }
+        .tp-swatch {
+          flex: 0 0 auto; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%;
+          border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.45);
+        }
+        .tp-map {
+          position: relative; isolation: isolate; z-index: 0; /* keeps Leaflet's layers under sticky headers */
+          width: 100%; height: 60vh; min-height: 340px; background: #eee;
+        }
+        .tp-root .leaflet-container { font: inherit; }
+        .tp-footer { max-width: 680px; margin: 14px 0 0; font-size: 12px; line-height: 1.45; color: #616161; }
+
+        /* Pins: 22px circles, 3px white border, drop shadow */
+        .tp-pin { background: none; border: 0; }
+        .tp-pin span {
+          display: block; width: 22px; height: 22px; border-radius: 50%;
+          border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.5);
+        }
+
+        /* Popup */
+        .tp-root .leaflet-popup-content { margin: 14px 16px; }
+        .tp-popup { font-size: 14px; line-height: 1.4; color: #000; }
+        .tp-popup p { margin: 0; }
+        .tp-popup-name { font-weight: 600; font-size: 15px; margin-bottom: 6px !important; }
+        .tp-popup-note { margin-bottom: 6px !important; }
+        .tp-popup-addr { margin-bottom: 14px !important; color: #616161; font-size: 13px; }
+        .tp-root a.tp-dir {
+          display: flex; align-items: center; justify-content: center;
+          width: 100%; min-height: 48px; padding: 12px 16px;
+          background: #000; color: #fff; border-radius: 0;
+          font-size: 15px; font-weight: 600; text-decoration: none;
+        }
+        .tp-root a.tp-dir:hover { background: #333; }
+
+        @media (max-width: 700px) {
+          .tp-root { font-size: 14px; }
+          .tp-title { margin-bottom: 28px; }
+        }
+      </style>
+
+      <script>
+      (function () {
+        var STORES = [
+          // CONVERSE
+          { cat: "converse", name: "Converse Store Harajuku",
+            note: "All Star J Hi, black, 27.5cm (his US size is 10) — flagship, best stock bet",
+            addr: "1-14-4 Jingumae, Shibuya-ku, Tokyo · 11 AM–8 PM",
+            lat: 35.6693, lng: 139.7052,
+            dest: "Converse Store Harajuku, 1-14-4 Jingumae, Shibuya City, Tokyo" },
+          { cat: "converse", name: "White atelier by CONVERSE",
+            note: "All Star J Hi, black, 27.5cm (his US size is 10) — backup, on Cat Street",
+            addr: "6-16-5 Jingumae, Shibuya-ku, Tokyo",
+            lat: 35.6639, lng: 139.7046,
+            dest: "White atelier BY CONVERSE, 6-16-5 Jingumae, Shibuya City, Tokyo" },
+
+          // MARGIELA
+          { cat: "margiela", name: "Margiela Fragrances — Omotesando Flagship",
+            note: "REPLICA Letter Never Sent",
+            addr: "Jingumae, Shibuya-ku, Tokyo (by Omotesando)",
+            lat: 35.6650, lng: 139.7122,
+            dest: "Maison Margiela Fragrances Omotesando, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Shibuya Scramble Square",
+            note: "REPLICA Letter Never Sent",
+            addr: "Shibuya Scramble Square, 2-24-12 Shibuya, Tokyo",
+            lat: 35.6579, lng: 139.7023,
+            dest: "Maison Margiela Fragrances Shibuya Scramble Square, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Shibuya PARCO",
+            note: "REPLICA Letter Never Sent",
+            addr: "Shibuya PARCO, 15-1 Udagawacho, Shibuya-ku, Tokyo",
+            lat: 35.6622, lng: 139.6984,
+            dest: "Maison Margiela Fragrances Shibuya PARCO, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Isetan Shinjuku",
+            note: "REPLICA Letter Never Sent — main building + men's building",
+            addr: "Isetan Shinjuku, 3-14-1 Shinjuku, Tokyo",
+            lat: 35.6916, lng: 139.7042,
+            dest: "Maison Margiela Fragrances Isetan Shinjuku, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — GINZA SIX Concept Store",
+            note: "REPLICA Letter Never Sent — the launch concept store",
+            addr: "GINZA SIX B1F, 6-10-1 Ginza, Chuo-ku, Tokyo · 10:30 AM–8:30 PM",
+            lat: 35.6698, lng: 139.7641,
+            dest: "Maison Margiela Fragrances Concept Store GINZA SIX, 6-10-1 Ginza, Chuo City, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Matsuya Ginza",
+            note: "REPLICA Letter Never Sent",
+            addr: "Matsuya Ginza, 3-6-1 Ginza, Chuo-ku, Tokyo",
+            lat: 35.6718, lng: 139.7669,
+            dest: "Maison Margiela Fragrances Matsuya Ginza, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Lumine Ikebukuro",
+            note: "REPLICA Letter Never Sent",
+            addr: "Lumine Ikebukuro, 1-11-1 Nishi-Ikebukuro, Tokyo",
+            lat: 35.7296, lng: 139.7093,
+            dest: "Maison Margiela Fragrances Lumine Ikebukuro, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — Seibu Ikebukuro",
+            note: "REPLICA Letter Never Sent",
+            addr: "Seibu Ikebukuro, 1-28-1 Minami-Ikebukuro, Tokyo",
+            lat: 35.7290, lng: 139.7122,
+            dest: "Maison Margiela Fragrances Seibu Ikebukuro, Tokyo" },
+          { cat: "margiela", name: "Margiela Fragrances — NEWoMan Takanawa",
+            note: "REPLICA Letter Never Sent",
+            addr: "NEWoMan Takanawa North 2F, 2-21-1 Takanawa, Minato-ku, Tokyo",
+            lat: 35.6361, lng: 139.7400,
+            dest: "Maison Margiela Fragrances NEWoMan Takanawa, Tokyo" },
+
+          // VISVIM
+          { cat: "visvim", name: "visvim — GYRE Omotesando flagship",
+            note: "Just check it out, it's really cool — and call me when you're there, I want to see it",
+            addr: "GYRE 2F, 5-10-1 Jingumae, Shibuya-ku, Tokyo · 11 AM–8 PM",
+            lat: 35.6674, lng: 139.7068,
+            dest: "visvim GYRE Omotesando, 5-10-1 Jingumae, Shibuya City, Tokyo" },
+
+          // T.T
+          { cat: "tt", name: "T.T (Taiga Takahashi) — ISETAN SALONE pop-up",
+            note: "Just check it out and call me when you're there, I want to see it. Pop-up October 14–18 only",
+            addr: "ISETAN SALONE, Tokyo Midtown, 9-7-1 Akasaka, Minato-ku, Tokyo",
+            lat: 35.6658, lng: 139.7312,
+            dest: "ISETAN SALONE Tokyo Midtown, 9-7-1 Akasaka, Minato City, Tokyo" }
+        ];
+
+        var COLORS = { converse: "#d2362c", margiela: "#191919", visvim: "#2563eb", tt: "#0e9f6e" };
+        var LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        var LEAFLET_JS  = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+
+        var root = document.getElementById("tokyo-pickups");
+        if (!root) return;
+        var mapEl = root.querySelector(".tp-map");
+        var map = null, loading = false, fitted = false, bounds = [];
+
+        function loadLeaflet(cb) {
+          if (!document.querySelector('link[href="' + LEAFLET_CSS + '"]')) {
+            var l = document.createElement("link");
+            l.rel = "stylesheet"; l.href = LEAFLET_CSS;
+            document.head.appendChild(l);
+          }
+          if (window.L && window.L.map) return cb();
+          var existing = document.querySelector('script[src="' + LEAFLET_JS + '"]');
+          if (existing) { existing.addEventListener("load", cb); return; }
+          var s = document.createElement("script");
+          s.src = LEAFLET_JS; s.onload = cb;
+          document.head.appendChild(s);
+        }
+
+        function el(tag, cls, text) {
+          var e = document.createElement(tag);
+          if (cls) e.className = cls;
+          if (text) e.textContent = text;
+          return e;
+        }
+
+        function popupFor(store) {
+          var box = el("div", "tp-popup");
+          box.appendChild(el("p", "tp-popup-name", store.name));
+          box.appendChild(el("p", "tp-popup-note", store.note));
+          box.appendChild(el("p", "tp-popup-addr", store.addr));
+          var a = el("a", "tp-dir", "Get directions");
+          a.href = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(store.dest);
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          box.appendChild(a);
+          return box;
+        }
+
+        function visible() { return mapEl.offsetWidth > 0 && mapEl.offsetHeight > 0; }
+        function fit() { map.fitBounds(bounds, { padding: [30, 30] }); fitted = true; }
+
+        function init() {
+          var L = window.L;
+          map = L.map(mapEl, { zoomControl: false });
+          L.control.zoom({ position: "bottomright" }).addTo(map); // keeps buttons clear of popups
+          L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }).addTo(map);
+
+          STORES.forEach(function (s) {
+            var icon = L.divIcon({
+              className: "tp-pin",
+              html: '<span style="background:' + COLORS[s.cat] + '"></span>',
+              iconSize: [22, 22],
+              iconAnchor: [11, 11],
+              popupAnchor: [0, -12]
+            });
+            L.marker([s.lat, s.lng], { icon: icon, title: s.name, alt: s.name })
+              .bindPopup(popupFor(s), { maxWidth: 280, minWidth: 220 })
+              .addTo(map);
+            bounds.push([s.lat, s.lng]);
+          });
+          check();
+        }
+
+        // Build the map the first time it's actually on screen (it can live inside a
+        // hidden section), and keep it sized correctly after rotations/route changes.
+        function check() {
+          if (!visible()) return;
+          if (!map) {
+            if (!loading) { loading = true; loadLeaflet(init); }
+            return;
+          }
+          map.invalidateSize();
+          if (!fitted) fit();
+        }
+
+        if (window.ResizeObserver) new ResizeObserver(check).observe(mapEl);
+        window.addEventListener("hashchange", function () { setTimeout(check, 0); });
+        window.addEventListener("resize", check);
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", check);
+        else check();
+      })();
+      </script>
+      <!-- ============================ END TOKYO PICKUPS MAP ============================ -->
+    </main>
+  </section>
+
   <div class="viewer" hidden role="dialog" aria-modal="true" aria-label="Expanded photograph">
     <div class="viewer-bar">
       <button class="viewer-close" type="button" aria-label="Close image">×</button>
@@ -1928,6 +2186,8 @@
           ? 'Photographs — Angel Montenegro'
           : post
             ? post[1] + '/' + post[2] + '/' + post[3] + ' — Angel Montenegro'
+            : path === '/tokyo'
+              ? 'Tokyo Pickups — Angel Montenegro'
             : path === '/blog'
               ? 'Blog — Angel Montenegro'
               : 'Angel Montenegro — Photographs';
