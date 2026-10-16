@@ -184,6 +184,42 @@
     .blog-photo-row--small { width: min(100%, 420px); }
     .blog-row + .blog-photo-row { margin-top: 36px; }
     .blog-photo-row + .blog-row { margin-top: 36px; }
+    .song { display: flex; align-items: center; gap: 12px; }
+    .song-play {
+      flex: none;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      background: var(--paper);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .song-play:hover, .song-play:focus-visible { background: var(--ink); color: var(--paper); }
+    .song-icon {
+      width: 0;
+      height: 0;
+      margin-left: 3px;
+      border-left: 11px solid currentColor;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+    }
+    .song.is-playing .song-icon {
+      width: 10px;
+      height: 12px;
+      margin: 0;
+      border: 0;
+      border-left: 3px solid currentColor;
+      border-right: 3px solid currentColor;
+    }
+    .song-meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+    .song-title { font-size: 15px; }
+    .song-artist { font-size: 12px; color: var(--muted); }
+    .song-player { width: min(100%, 360px); aspect-ratio: 16 / 9; margin-top: 14px; }
+    .song-player iframe { width: 100%; height: 100%; border: 0; display: block; }
 
     .viewer {
       position: fixed;
@@ -1739,6 +1775,13 @@
         <img src="images/blog/10-14-26.jpg" width="2576" height="1932" alt="Plaid flannel shirt with a hand-drawn yellow frog patch and a speech bubble that reads “I know Supreme”">
         <p>people really thought a $150, 6-year-old shirt was fake haha. hmm.<br>someone asked me if my jeans were from japan. i said yes, and they said “proof.” i showed them the sugar cane label on the back, and they said “those aren’t from japan, they have english text”…</p>
       </div>
+      <div class="blog-row">
+        <div class="song" data-video="T8bVRdHCkUw">
+          <button class="song-play" type="button" aria-label="Play World’s a Fuck by Sematary and Ghost Mountain"><span class="song-icon" aria-hidden="true"></span></button>
+          <div class="song-meta"><span class="song-title">world’s a fuck</span><span class="song-artist">sematary &amp; ghost mountain</span></div>
+        </div>
+        <div class="song-player" hidden></div>
+      </div>
     </main>
   </section>
 
@@ -2005,6 +2048,86 @@
       });
       window.addEventListener('hashchange', route);
       route();
+    }());
+  </script>
+  <script>
+    // Song players: a small play button with the title and artist; the YouTube player opens underneath on first tap.
+    (function () {
+      var songs = Array.prototype.slice.call(document.querySelectorAll('.song'));
+      if (!songs.length) return;
+      var apiPromise = null;
+      var players = [];
+
+      function loadApi() {
+        if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+        if (apiPromise) return apiPromise;
+        apiPromise = new Promise(function (resolve, reject) {
+          var previous = window.onYouTubeIframeAPIReady;
+          window.onYouTubeIframeAPIReady = function () {
+            if (previous) previous();
+            resolve(window.YT);
+          };
+          var script = document.createElement('script');
+          script.src = 'https://www.youtube.com/iframe_api';
+          script.onerror = reject;
+          document.head.appendChild(script);
+          setTimeout(reject, 8000);
+        });
+        return apiPromise;
+      }
+
+      songs.forEach(function (song) {
+        var button = song.querySelector('.song-play');
+        var box = song.nextElementSibling;
+        var id = song.getAttribute('data-video');
+        var label = button.getAttribute('aria-label').replace(/^Play /, '');
+        var player = null;
+        var started = false;
+
+        function setPlaying(on) {
+          song.classList.toggle('is-playing', on);
+          button.setAttribute('aria-label', (on ? 'Pause ' : 'Play ') + label);
+        }
+
+        function fallback() {
+          box.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + id +
+            '?autoplay=1&playsinline=1&rel=0" title="' + label + '" allow="autoplay; encrypted-media; picture-in-picture" ' +
+            'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
+          setPlaying(false);
+          button.disabled = true;
+        }
+
+        button.addEventListener('click', function () {
+          if (player && player.getPlayerState) {
+            var state = player.getPlayerState();
+            if (state === 1 || state === 3) player.pauseVideo(); else player.playVideo();
+            return;
+          }
+          if (started) return;
+          started = true;
+          box.hidden = false;
+          setPlaying(true);
+          var mount = document.createElement('div');
+          box.appendChild(mount);
+          loadApi().then(function (YT) {
+            player = new YT.Player(mount, {
+              host: 'https://www.youtube-nocookie.com',
+              videoId: id,
+              playerVars: { autoplay: 1, playsinline: 1, rel: 0 },
+              events: {
+                onReady: function (event) { event.target.playVideo(); },
+                onStateChange: function (event) { setPlaying(event.data === 1 || event.data === 3); }
+              }
+            });
+            players.push(player);
+          }, function () { fallback(); });
+        });
+      });
+
+      // Stop the music when leaving the post.
+      window.addEventListener('hashchange', function () {
+        players.forEach(function (p) { if (p.pauseVideo) p.pauseVideo(); });
+      });
     }());
   </script>
 </body>
