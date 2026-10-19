@@ -177,6 +177,13 @@
       display: block;
       margin: 0 0 18px;
     }
+    .blog-photo-row video {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 0 18px;
+      background: #000;
+    }
     .blog-photo-row p { margin: 0; }
     .blog-photo-row .blog-photo-lead { margin: 0 0 18px; }
     .blog-photo-row + .blog-photo-row { margin-top: 72px; }
@@ -1734,6 +1741,7 @@
     <main class="blog" aria-labelledby="blog-title">
       <h2 class="blog-heading" id="blog-title">blog</h2>
       <div class="blog-row">
+        <p><a href="#/blog/10-18-26">10/18/26</a></p>
         <p><a href="#/blog/10-17-26">10/17/26</a></p>
         <p><a href="#/blog/10-16-26">10/16/26</a></p>
         <p><a href="#/blog/10-15-26">10/15/26</a></p>
@@ -1753,6 +1761,16 @@
         <p><a href="#/blog/9-27-26">9/27/26</a></p>
         <p><a href="#/blog/9-26-26">9/26/26</a></p>
         <p><a href="#/blog/9-25-26">9/25/26</a></p>
+      </div>
+    </main>
+  </section>
+
+  <section class="view blog-post-view" data-route="/blog/10-18-26" hidden>
+    <main class="blog blog-post">
+      <a class="post-back" href="#/blog">← blog</a>
+      <div class="blog-photo-row">
+        <video src="videos/blog/10-18-26.mp4" poster="images/blog/10-18-26-poster.jpg" width="1920" height="1080" controls playsinline preload="metadata" aria-label="Video in a store aisle holding up three amber vitamin bottles"></video>
+        <p>i’m finally being consistent with vitamins, we’re locking in now</p>
       </div>
     </main>
   </section>
@@ -2012,6 +2030,7 @@
         var known = views.some(function (view) { return view.getAttribute('data-route') === path; });
         if (!known) path = '/';
         if (!viewer.hidden) closeViewer(false);
+        Array.prototype.forEach.call(document.querySelectorAll('video'), function (v) { v.pause(); });
         views.forEach(function (view) {
           view.hidden = view.getAttribute('data-route') !== path;
         });
